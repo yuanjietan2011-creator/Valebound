@@ -3,37 +3,86 @@ import React, { useRef, useState } from 'react';
 interface TouchControlsProps {
   potions: number;
   canHeal: boolean;
+  boltAmmo: number;
+  maxBoltAmmo: number;
+  isReloading: boolean;
+  reloadProgress: number;
   onJoystickChange: (dir: { left: boolean; right: boolean; down: boolean }) => void;
-  onActionButton: (action: 'jump' | 'cast' | 'potion', pressed: boolean) => void;
+  onActionButton: (
+    action: 'jump' | 'cast' | 'potion' | 'reload',
+    pressed: boolean
+  ) => void;
 }
 
-const MAX_RADIUS = 38;
-const DEAD_ZONE_X = 11;
-const CROUCH_ZONE_Y = 24;
+const JOYSTICK_SIZE = 140;
+const HALF_JOY = JOYSTICK_SIZE / 2;
+const MAX_RADIUS = 48;
+const DEAD_ZONE_X = 12;
+const CROUCH_ZONE_Y = 28;
+const EDGE_MARGIN = 44;
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, v));
+}
 
 export const TouchControls: React.FC<TouchControlsProps> = ({
   potions,
   canHeal,
+  boltAmmo,
+  maxBoltAmmo,
+  isReloading,
+  reloadProgress,
   onJoystickChange,
   onActionButton,
 }) => {
-  const baseRef = useRef<HTMLDivElement | null>(null);
+  const zoneRef = useRef<HTMLDivElement | null>(null);
   const activePointerRef = useRef<number | null>(null);
+  const originRef = useRef<{ x: number; y: number } | null>(null);
+  const [origin, setOrigin] = useState<{ x: number; y: number } | null>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
 
-  const updateStick = (clientX: number, clientY: number) => {
-    const base = baseRef.current;
-    if (!base) return;
-    const rect = base.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const dx = clientX - cx;
-    const dy = clientY - cy;
-    const dist = Math.hypot(dx, dy);
+  const startStick = (clientX: number, clientY: number) => {
+    const zone = zoneRef.current;
+    if (!zone) return;
+    const rect = zone.getBoundingClientRect();
+    const ox = clamp(clientX - rect.left, EDGE_MARGIN, rect.width - EDGE_MARGIN);
+    const oy = clamp(clientY - rect.top, EDGE_MARGIN, rect.height - EDGE_MARGIN);
+    const nextOrigin = { x: ox, y: oy };
+    originRef.current = nextOrigin;
+    setOrigin(nextOrigin);
+    setKnob({ x: 0, y: 0 });
+    onJoystickChange({ left: false, right: false, down: false });
+  };
+
+  const moveStick = (clientX: number, clientY: number) => {
+    const zone = zoneRef.current;
+    const curOrigin = originRef.current;
+    if (!zone || !curOrigin) return;
+    const rect = zone.getBoundingClientRect();
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
+
+    let ox = curOrigin.x;
+    let oy = curOrigin.y;
+    let dx = localX - ox;
+    let dy = localY - oy;
+    let dist = Math.hypot(dx, dy);
+
+    // Slide joystick base to follow finger within the movement area when dragged beyond outer rim
+    if (dist > MAX_RADIUS) {
+      ox = clamp(localX - (dx / dist) * MAX_RADIUS, EDGE_MARGIN, rect.width - EDGE_MARGIN);
+      oy = clamp(localY - (dy / dist) * MAX_RADIUS, EDGE_MARGIN, rect.height - EDGE_MARGIN);
+      const nextOrigin = { x: ox, y: oy };
+      originRef.current = nextOrigin;
+      setOrigin(nextOrigin);
+      dx = localX - ox;
+      dy = localY - oy;
+      dist = Math.hypot(dx, dy);
+    }
+
     const clamped = Math.min(MAX_RADIUS, dist);
-    const angle = Math.atan2(dy, dx);
-    const kx = dist > 0 ? Math.cos(angle) * clamped : 0;
-    const ky = dist > 0 ? Math.sin(angle) * clamped : 0;
+    const kx = dist > 0 ? (dx / dist) * clamped : 0;
+    const ky = dist > 0 ? (dy / dist) * clamped : 0;
 
     setKnob({ x: kx, y: ky });
     onJoystickChange({
@@ -45,29 +94,42 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
 
   const resetStick = () => {
     activePointerRef.current = null;
+    originRef.current = null;
+    setOrigin(null);
     setKnob({ x: 0, y: 0 });
     onJoystickChange({ left: false, right: false, down: false });
   };
 
+  const ringStyle: React.CSSProperties = origin
+    ? {
+        width: JOYSTICK_SIZE,
+        height: JOYSTICK_SIZE,
+        left: origin.x - HALF_JOY,
+        top: origin.y - HALF_JOY,
+      }
+    : {
+        width: JOYSTICK_SIZE,
+        height: JOYSTICK_SIZE,
+        left: 16,
+        bottom: 16,
+      };
+
   return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-20 pointer-events-none flex items-end justify-between px-5 pb-5"
-      data-testid="mobile-touch-controls"
-    >
-      {/* Virtual Thumb Joystick */}
+    <div data-testid="mobile-touch-controls">
+      {/* Left Floating / Follow-Finger Joystick Zone */}
       <div
-        ref={baseRef}
-        role="group"
-        aria-label="Movement joystick"
+        ref={zoneRef}
+        data-testid="joystick-zone"
+        aria-label="Joystick touch area"
         onPointerDown={(e) => {
           e.preventDefault();
           activePointerRef.current = e.pointerId;
           e.currentTarget.setPointerCapture(e.pointerId);
-          updateStick(e.clientX, e.clientY);
+          startStick(e.clientX, e.clientY);
         }}
         onPointerMove={(e) => {
           if (activePointerRef.current === e.pointerId) {
-            updateStick(e.clientX, e.clientY);
+            moveStick(e.clientX, e.clientY);
           }
         }}
         onPointerUp={(e) => {
@@ -76,18 +138,26 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
           }
         }}
         onPointerCancel={resetStick}
-        className="pointer-events-auto relative w-28 h-28 rounded-full bg-[#0f1723]/80 border-2 border-slate-500/70 touch-none flex items-center justify-center shadow-lg"
+        className="fixed left-0 bottom-0 z-20 w-[47vw] max-w-[240px] h-[44vh] min-h-[220px] max-h-[300px] touch-none select-none border-t border-r border-slate-300/12 rounded-tr-3xl"
       >
+        {/* Bigger Virtual Thumb Joystick */}
         <div
-          className="w-11 h-11 rounded-full bg-amber-400/90 border-2 border-slate-900 shadow-md"
-          style={{
-            transform: `translate(${knob.x}px, ${knob.y}px)`,
-          }}
-        />
+          role="group"
+          aria-label="Movement joystick"
+          style={ringStyle}
+          className="absolute rounded-full bg-[#0f1723]/78 border-2 border-slate-400/70 flex items-center justify-center shadow-lg pointer-events-none"
+        >
+          <div
+            className="w-14 h-14 rounded-full bg-amber-400/92 border-2 border-slate-900 shadow-md"
+            style={{
+              transform: `translate(${knob.x}px, ${knob.y}px)`,
+            }}
+          />
+        </div>
       </div>
 
       {/* Right-Hand Action Buttons */}
-      <div className="pointer-events-auto flex items-end gap-3 touch-none">
+      <div className="fixed right-3 bottom-4 z-20 pointer-events-auto flex items-end gap-2 touch-none">
         <button
           type="button"
           tabIndex={-1}
@@ -110,10 +180,23 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
             onActionButton('cast', true);
           }}
           onPointerUp={() => onActionButton('cast', false)}
-          className="w-14 h-14 rounded-full bg-amber-950/90 active:bg-amber-800 border-2 border-amber-500/80 text-amber-200 font-semibold text-xs shadow-md"
-          aria-label="Lantern bolt"
+          className={`relative w-14 h-14 rounded-full border-2 font-semibold text-xs shadow-md overflow-hidden flex flex-col items-center justify-center leading-tight ${
+            isReloading
+              ? 'bg-slate-900/90 border-amber-500/50 text-amber-300/85'
+              : 'bg-amber-950/90 active:bg-amber-800 border-amber-500/80 text-amber-200'
+          }`}
+          aria-label={isReloading ? 'Reloading lantern bolts' : `Lantern bolt (${boltAmmo} of ${maxBoltAmmo})`}
         >
-          Bolt
+          {isReloading && (
+            <span
+              className="absolute inset-x-0 bottom-0 bg-amber-500/25 pointer-events-none"
+              style={{ height: `${Math.round(reloadProgress * 100)}%` }}
+            />
+          )}
+          <span className="relative z-10">{isReloading ? 'Reload' : 'Bolt'}</span>
+          <span className="relative z-10 text-[10px] font-mono-nums opacity-90">
+            {isReloading ? `${Math.round(reloadProgress * 100)}%` : `${boltAmmo}/${maxBoltAmmo}`}
+          </span>
         </button>
 
         <button

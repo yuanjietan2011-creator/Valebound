@@ -29,12 +29,16 @@ export const MAX_FALL_SPEED = 780;
 export const COYOTE_TIME = 0.12;
 export const JUMP_BUFFER_TIME = 0.14;
 export const CAST_COOLDOWN = 0.36;
+export const MAX_BOLT_AMMO = 5;
+export const BOLT_RELOAD_TIME = 1.35;
 
 export interface SimulationEvents {
   jumped?: boolean;
   landed?: boolean;
   stomp?: boolean;
   bolt?: boolean;
+  reloaded?: boolean;
+  emptyClick?: boolean;
   coin?: boolean;
   xp?: boolean;
   chest?: boolean;
@@ -264,6 +268,8 @@ export function createWorld(stage: StageDefinition, stats: RpgStats): WorldState
     crouching: false,
     lastSafeX: stage.spawnTile.x * TILE_SIZE + 4,
     lastSafeY: stage.spawnTile.y * TILE_SIZE + 2,
+    boltAmmo: MAX_BOLT_AMMO,
+    reloadTimer: 0,
   };
 
   const particles: ParticleSlot[] = Array.from({ length: 96 }, () => ({
@@ -657,6 +663,30 @@ export function stepWorld(
   if (p.hurtFlashTimer > 0) p.hurtFlashTimer = Math.max(0, p.hurtFlashTimer - dt);
   if (p.castCooldown > 0) p.castCooldown = Math.max(0, p.castCooldown - dt);
 
+  if (p.reloadTimer > 0) {
+    p.reloadTimer = Math.max(0, p.reloadTimer - dt);
+    if (p.reloadTimer === 0) {
+      p.boltAmmo = MAX_BOLT_AMMO;
+      events.reloaded = true;
+      addFloatingText(
+        world,
+        p.x + p.w / 2,
+        p.y - 10,
+        'Reloaded!',
+        '#fde047'
+      );
+    }
+  } else if (input.reloadJustPressed && p.boltAmmo < MAX_BOLT_AMMO) {
+    p.reloadTimer = BOLT_RELOAD_TIME;
+    addFloatingText(
+      world,
+      p.x + p.w / 2,
+      p.y - 10,
+      'Reloading...',
+      '#fbbf24'
+    );
+  }
+
   // Carry by moving platform
   if (p.grounded && p.onPlatformId) {
     const mp = world.movingPlatforms.find((m) => m.id === p.onPlatformId);
@@ -719,23 +749,42 @@ export function stepWorld(
     }
   }
 
-  // Cast Lantern Bolt
+  // Cast Lantern Bolt (5-bullet magazine + reload)
   if (input.castJustPressed && p.castCooldown <= 0) {
-    p.castCooldown = CAST_COOLDOWN;
-    world.uidCounter += 1;
-    world.projectiles.push({
-      id: `bolt_${world.uidCounter}`,
-      fromPlayer: true,
-      x: p.x + (p.facing === 1 ? p.w + 2 : -2),
-      y: p.y + 13,
-      vx: p.facing * 420,
-      vy: 0,
-      radius: 5,
-      damage: getBoltDamage(world.stats),
-      ttl: 0.72,
-      alive: true,
-    });
-    events.bolt = true;
+    if (p.reloadTimer <= 0 && p.boltAmmo > 0) {
+      p.castCooldown = CAST_COOLDOWN;
+      p.boltAmmo -= 1;
+      world.uidCounter += 1;
+      world.projectiles.push({
+        id: `bolt_${world.uidCounter}`,
+        fromPlayer: true,
+        x: p.x + (p.facing === 1 ? p.w + 2 : -2),
+        y: p.y + 13,
+        vx: p.facing * 420,
+        vy: 0,
+        radius: 5,
+        damage: getBoltDamage(world.stats),
+        ttl: 0.72,
+        alive: true,
+      });
+      events.bolt = true;
+      if (p.boltAmmo <= 0) {
+        p.boltAmmo = 0;
+        p.reloadTimer = BOLT_RELOAD_TIME;
+        addFloatingText(
+          world,
+          p.x + p.w / 2,
+          p.y - 10,
+          'Reloading...',
+          '#fbbf24'
+        );
+      }
+    } else {
+      if (p.boltAmmo <= 0 && p.reloadTimer <= 0) {
+        p.reloadTimer = BOLT_RELOAD_TIME;
+      }
+      events.emptyClick = true;
+    }
   }
 
   // Apply gravity (variable jump release + fast-fall if holding down)

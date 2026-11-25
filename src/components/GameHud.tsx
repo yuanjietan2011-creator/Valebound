@@ -15,7 +15,10 @@ interface GameHudProps {
   onRestart: () => void;
   onOpenStages: () => void;
   onJoystickChange: (dir: { left: boolean; right: boolean; down: boolean }) => void;
-  onTouchAction: (action: 'jump' | 'cast' | 'potion', pressed: boolean) => void;
+  onTouchAction: (
+    action: 'jump' | 'cast' | 'potion' | 'reload',
+    pressed: boolean
+  ) => void;
 }
 
 const HeartSocket: React.FC<{ state: 'full' | 'empty' }> = ({ state }) => (
@@ -119,6 +122,38 @@ export const GameHud: React.FC<GameHudProps> = ({
                   style={{ width: `${xpPct}%` }}
                 />
               </div>
+            </div>
+
+            {/* Lantern Bolts (5-shot magazine + reload) */}
+            <div className="mt-2" data-testid="hud-ammo">
+              <div className="flex items-center justify-between text-[11px] font-mono-nums mb-1">
+                <span className={hud.isReloading ? 'text-amber-300 font-semibold' : 'text-slate-300'}>
+                  {hud.isReloading ? 'Reloading...' : 'Bolts'}
+                </span>
+                <div className="flex items-center gap-1" aria-label={`Bolts ${hud.boltAmmo} of ${hud.maxBoltAmmo}`}>
+                  {Array.from({ length: hud.maxBoltAmmo }, (_, idx) => (
+                    <span
+                      key={idx}
+                      className={`w-2 h-2 rounded-full border ${
+                        idx < hud.boltAmmo
+                          ? 'bg-amber-400 border-amber-200'
+                          : 'bg-slate-800 border-slate-600'
+                      }`}
+                    />
+                  ))}
+                  <span className="ml-1 text-slate-200">
+                    {hud.boltAmmo}/{hud.maxBoltAmmo}
+                  </span>
+                </div>
+              </div>
+              {hud.isReloading && (
+                <div className="w-full h-1 bg-slate-800 rounded-sm overflow-hidden">
+                  <div
+                    className="h-full bg-amber-400 transition-[width] duration-75"
+                    style={{ width: `${Math.round(hud.reloadProgress * 100)}%` }}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Potion & Relics Row */}
@@ -310,7 +345,7 @@ export const GameHud: React.FC<GameHudProps> = ({
         {/* Quiet desktop key line */}
         {!isTouchDevice && (
           <div className="text-[11px] text-slate-200/80 hud-stroke">
-            WASD / Arrows Move &amp; Jump · F Bolt · Q Potion · V Fullscreen · P Pause
+            WASD / Arrows Move &amp; Jump · F Bolt (5) · C Reload · Q Potion · V Fullscreen · P Pause
           </div>
         )}
       </div>
@@ -320,6 +355,10 @@ export const GameHud: React.FC<GameHudProps> = ({
         <TouchControls
           potions={hud.potions}
           canHeal={hud.hp < hud.maxHp}
+          boltAmmo={hud.boltAmmo}
+          maxBoltAmmo={hud.maxBoltAmmo}
+          isReloading={hud.isReloading}
+          reloadProgress={hud.reloadProgress}
           onJoystickChange={onJoystickChange}
           onActionButton={onTouchAction}
         />

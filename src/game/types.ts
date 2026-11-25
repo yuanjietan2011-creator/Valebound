@@ -137,6 +137,8 @@ export interface PlayerEntity {
   crouching: boolean;
   lastSafeX: number;
   lastSafeY: number;
+  boltAmmo: number;
+  reloadTimer: number;
 }
 
 export type EnemyAiState = 'patrol' | 'windup' | 'attack' | 'recover' | 'ko';
@@ -262,6 +264,10 @@ export interface HudSnapshot {
   bossMaxHp: number | null;
   bossName: string | null;
   bannerText: string | null;
+  boltAmmo: number;
+  maxBoltAmmo: number;
+  isReloading: boolean;
+  reloadProgress: number;
 }
 
 export interface StageRecord {
@@ -278,4 +284,5 @@ export interface InputState {
   down: boolean;
   castJustPressed: boolean;
   potionJustPressed: boolean;
+  reloadJustPressed?: boolean;
 }

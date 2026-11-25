@@ -78,7 +78,7 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
 
       {/* Bottom flat control hint */}
       <div className="text-xs md:text-sm text-slate-100/90 hud-stroke tracking-wide">
-        WASD or Arrow Keys Move &amp; Jump · F Lantern Bolt · Q Potion · V Fullscreen · P Pause
+        WASD or Arrow Keys Move &amp; Jump · F Lantern Bolt · C Reload · Q Potion · V Fullscreen · P Pause
       </div>
     </div>
   );

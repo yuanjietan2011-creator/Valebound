@@ -5,7 +5,13 @@ import { StageSelectModal } from './components/StageSelectModal';
 import { TitleOverlay } from './components/TitleOverlay';
 import { soundEngine } from './game/audio';
 import { STAGES } from './game/levels';
-import { createWorld, stepWorld, type WorldState } from './game/physics';
+import {
+  BOLT_RELOAD_TIME,
+  createWorld,
+  MAX_BOLT_AMMO,
+  stepWorld,
+  type WorldState,
+} from './game/physics';
 import { renderWorld } from './game/renderer';
 import { createInitialRpgStats } from './game/rpg';
 import type {
@@ -88,6 +94,13 @@ function makeHudSnapshot(world: WorldState, phase: GamePhase): HudSnapshot {
     bossMaxHp: boss ? boss.maxHp : null,
     bossName: boss ? (boss.bossName ?? 'The Ash Warden') : null,
     bannerText: world.bannerText,
+    boltAmmo: world.player.boltAmmo,
+    maxBoltAmmo: MAX_BOLT_AMMO,
+    isReloading: world.player.reloadTimer > 0,
+    reloadProgress:
+      world.player.reloadTimer > 0
+        ? Math.max(0, Math.min(1, 1 - world.player.reloadTimer / BOLT_RELOAD_TIME))
+        : 1,
   };
 }
 
@@ -109,6 +122,7 @@ export default function App() {
   const jumpQueuedRef = useRef(false);
   const castQueuedRef = useRef(false);
   const potionQueuedRef = useRef(false);
+  const reloadQueuedRef = useRef(false);
   const touchStateRef = useRef({
     left: false,
     right: false,
@@ -155,6 +169,7 @@ export default function App() {
       jumpQueuedRef.current = false;
       castQueuedRef.current = false;
       potionQueuedRef.current = false;
+      reloadQueuedRef.current = false;
       touchStateRef.current = {
         left: false,
         right: false,
@@ -280,7 +295,7 @@ export default function App() {
   );
 
   const handleTouchAction = useCallback(
-    (action: 'jump' | 'cast' | 'potion', pressed: boolean) => {
+    (action: 'jump' | 'cast' | 'potion' | 'reload', pressed: boolean) => {
       if (action === 'jump') {
         if (pressed && !touchStateRef.current.jump) {
           jumpQueuedRef.current = true;
@@ -290,6 +305,8 @@ export default function App() {
         castQueuedRef.current = true;
       } else if (action === 'potion' && pressed) {
         potionQueuedRef.current = true;
+      } else if (action === 'reload' && pressed) {
+        reloadQueuedRef.current = true;
       }
     },
     []
@@ -396,6 +413,7 @@ export default function App() {
         e.code === 'KeyW' || e.code === 'ArrowUp' || e.code === 'Space';
       const isCastKey = e.code === 'KeyF' || e.code === 'KeyJ';
       const isPotionKey = e.code === 'KeyQ' || e.code === 'KeyE';
+      const isReloadKey = e.code === 'KeyC';
       const isMoveKey =
         e.code === 'KeyA' ||
         e.code === 'KeyD' ||
@@ -404,7 +422,7 @@ export default function App() {
         e.code === 'ArrowRight' ||
         e.code === 'ArrowDown';
 
-      if (isJumpKey || isCastKey || isPotionKey || isMoveKey) {
+      if (isJumpKey || isCastKey || isPotionKey || isReloadKey || isMoveKey) {
         e.preventDefault();
       }
 
@@ -416,6 +434,9 @@ export default function App() {
       }
       if (isPotionKey && !e.repeat) {
         potionQueuedRef.current = true;
+      }
+      if (isReloadKey && !e.repeat) {
+        reloadQueuedRef.current = true;
       }
       keysHeldRef.current.add(e.code);
     };
@@ -509,10 +530,12 @@ export default function App() {
           down: held.has('KeyS') || held.has('ArrowDown') || touch.down,
           castJustPressed: castQueuedRef.current,
           potionJustPressed: potionQueuedRef.current,
+          reloadJustPressed: reloadQueuedRef.current,
         };
         jumpQueuedRef.current = false;
         castQueuedRef.current = false;
         potionQueuedRef.current = false;
+        reloadQueuedRef.current = false;
 
         const events = stepWorld(world, input, rawDt);
 
@@ -522,6 +545,8 @@ export default function App() {
         if (events.xp) soundEngine.play('xp');
         if (events.stomp) soundEngine.play('stomp');
         if (events.bolt) soundEngine.play('bolt');
+        if (events.reloaded) soundEngine.play('reload');
+        if (events.emptyClick) soundEngine.play('empty_click');
         if (events.chest) soundEngine.play('chest');
         if (events.potion) soundEngine.play('potion');
         if (events.hurt) soundEngine.play('hurt');
@@ -563,7 +588,11 @@ export default function App() {
         const boss = world.enemies.find(
           (e) => e.type === 'warden' && e.state !== 'ko'
         );
-        const sig = `${world.stage.index}|${world.stats.hp}/${world.stats.maxHp}|${world.stats.level}|${world.stats.xp}|${world.stats.gold}|${world.stats.potions}|${world.stats.relics.length}|${Math.floor(world.elapsedSeconds)}|${boss ? boss.hp : -1}|${world.bannerText ?? ''}`;
+        const reloadBucket =
+          world.player.reloadTimer > 0
+            ? Math.ceil(world.player.reloadTimer * 10)
+            : 0;
+        const sig = `${world.stage.index}|${world.stats.hp}/${world.stats.maxHp}|${world.stats.level}|${world.stats.xp}|${world.stats.gold}|${world.stats.potions}|${world.stats.relics.length}|${Math.floor(world.elapsedSeconds)}|${boss ? boss.hp : -1}|${world.bannerText ?? ''}|${world.player.boltAmmo}|${reloadBucket}`;
         if (sig !== lastHudSignature) {
           lastHudSignature = sig;
           setHud(makeHudSnapshot(world, phaseRef.current));

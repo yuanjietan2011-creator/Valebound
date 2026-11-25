@@ -12,7 +12,13 @@ import {
   usePotion,
   xpNeededForLevel,
 } from './rpg';
-import { createWorld, stepWorld } from './physics';
+import {
+  BOLT_RELOAD_TIME,
+  CAST_COOLDOWN,
+  createWorld,
+  MAX_BOLT_AMMO,
+  stepWorld,
+} from './physics';
 import type { InputState } from './types';
 
 function emptyInput(): InputState {
@@ -24,6 +30,7 @@ function emptyInput(): InputState {
     down: false,
     castJustPressed: false,
     potionJustPressed: false,
+    reloadJustPressed: false,
   };
 }
 
@@ -237,3 +244,66 @@ test('pit fall respawns player at last safe ledge instead of stage start', () =>
   assert.equal(world.defeated, false);
   assert.equal(world.player.x, savedX);
 });
+
+test('shooting holds 5 bullets before requiring reload and refills after reload', () => {
+  const world = createWorld(STAGES[0], createInitialRpgStats());
+  assert.equal(world.player.boltAmmo, MAX_BOLT_AMMO);
+  assert.equal(MAX_BOLT_AMMO, 5);
+
+  let firedCount = 0;
+  for (let shot = 0; shot < 5; shot++) {
+    // Wait out castCooldown cleanly
+    for (let t = 0; t < Math.ceil(CAST_COOLDOWN * 60) + 2; t++) {
+      stepWorld(world, emptyInput(), 1 / 60);
+    }
+    const ev = stepWorld(
+      world,
+      { ...emptyInput(), castJustPressed: true },
+      1 / 60
+    );
+    if (ev.bolt) firedCount += 1;
+  }
+
+  assert.equal(firedCount, 5);
+  assert.equal(world.player.boltAmmo, 0);
+  assert.ok(world.player.reloadTimer > 0, 'Reload should begin after 5th shot');
+
+  // 6th shot attempt while reloading should not fire
+  for (let t = 0; t < Math.ceil(CAST_COOLDOWN * 60) + 2; t++) {
+    stepWorld(world, emptyInput(), 1 / 60);
+  }
+  const blockedEv = stepWorld(
+    world,
+    { ...emptyInput(), castJustPressed: true },
+    1 / 60
+  );
+  assert.equal(blockedEv.bolt ?? false, false);
+  assert.equal(blockedEv.emptyClick, true);
+
+  // Advance through reload duration
+  let sawReloaded = false;
+  for (let t = 0; t < Math.ceil(BOLT_RELOAD_TIME * 60) + 10; t++) {
+    const ev = stepWorld(world, emptyInput(), 1 / 60);
+    if (ev.reloaded) sawReloaded = true;
+  }
+  assert.equal(sawReloaded, true);
+  assert.equal(world.player.boltAmmo, 5);
+  assert.equal(world.player.reloadTimer, 0);
+
+  // Firing works again after reload, and manual reload refills partial mag
+  const afterEv = stepWorld(
+    world,
+    { ...emptyInput(), castJustPressed: true },
+    1 / 60
+  );
+  assert.equal(afterEv.bolt, true);
+  assert.equal(world.player.boltAmmo, 4);
+
+  stepWorld(world, { ...emptyInput(), reloadJustPressed: true }, 1 / 60);
+  assert.ok(world.player.reloadTimer > 0);
+  for (let t = 0; t < Math.ceil(BOLT_RELOAD_TIME * 60) + 10; t++) {
+    stepWorld(world, emptyInput(), 1 / 60);
+  }
+  assert.equal(world.player.boltAmmo, 5);
+});
+

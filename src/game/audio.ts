@@ -10,7 +10,9 @@ type SoundEffect =
   | 'chest'
   | 'potion'
   | 'stage_clear'
-  | 'defeat';
+  | 'defeat'
+  | 'reload'
+  | 'empty_click';
 
 // Calm pentatonic traveler's melody (D minor / F major mood, Hz)
 const BGM_MELODY_HZ = [
@@ -220,6 +222,13 @@ class SoundEngine {
       case 'defeat':
         this.tone(300, 220, 0.16, 'sawtooth', 0.08, 0);
         this.tone(220, 140, 0.26, 'sawtooth', 0.08, 0.14);
+        break;
+      case 'reload':
+        this.tone(440, 620, 0.09, 'triangle', 0.07, 0);
+        this.tone(660, 880, 0.1, 'sine', 0.07, 0.06);
+        break;
+      case 'empty_click':
+        this.tone(210, 150, 0.04, 'square', 0.035);
         break;
     }
   }
