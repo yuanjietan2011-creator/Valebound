@@ -1,0 +1,6 @@
+{
+  "name": "Valebound: The Ten Shrines",
+  "description": "A single-player side-scrolling RPG platformer featuring Vesper the Lantern Nomad across ten handcrafted stages.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
