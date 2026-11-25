@@ -70,12 +70,12 @@ export const GameHud: React.FC<GameHudProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-10 pointer-events-none flex flex-col justify-between p-3 md:p-5">
+      <div className="fixed inset-0 z-10 pointer-events-none flex flex-col justify-between p-2.5 sm:p-3 md:p-5">
         {/* Top Perimeter Row */}
         <div className="flex items-start justify-between gap-2 sm:gap-3">
           {/* Top-Left: Hero Vitality, Level, XP, Gold, Potion */}
           <div
-            className="pointer-events-auto bg-[#0f1723]/90 border border-slate-700/80 rounded-md px-2.5 py-2 sm:px-3 sm:py-2 shadow-lg min-w-[175px] sm:min-w-[215px] max-w-[196px] sm:max-w-[265px]"
+            className="pointer-events-auto bg-[#0f1723]/90 border border-slate-700/80 rounded-md px-2.5 py-2 sm:px-3 sm:py-2 shadow-lg min-w-[172px] sm:min-w-[215px] max-w-[190px] sm:max-w-[265px]"
             aria-label="Hero status"
           >
             <div className="flex items-center justify-between gap-3">
@@ -166,7 +166,7 @@ export const GameHud: React.FC<GameHudProps> = ({
                   onUsePotion();
                 }}
                 disabled={hud.potions <= 0 || hud.hp >= hud.maxHp}
-                className="px-2 py-1 rounded bg-emerald-950/90 hover:bg-emerald-900 disabled:opacity-45 border border-emerald-700/70 text-emerald-200 font-mono-nums text-[11px] transition-colors cursor-pointer disabled:cursor-default whitespace-nowrap shrink-0"
+                className="px-2.5 py-1.5 rounded bg-emerald-950/90 hover:bg-emerald-900 disabled:opacity-45 border border-emerald-700/70 text-emerald-200 font-mono-nums text-xs transition-colors cursor-pointer disabled:cursor-default whitespace-nowrap shrink-0"
                 title="Use Healing Potion [Q]"
               >
                 Potion [Q]: {hud.potions}
@@ -230,7 +230,7 @@ export const GameHud: React.FC<GameHudProps> = ({
           </div>
 
           {/* Top-Right: Utility Controls (including Fullscreen for PC & Phone) */}
-          <div className="pointer-events-auto flex flex-wrap items-center justify-end gap-1.5 md:gap-2 max-w-[156px] sm:max-w-none shrink-0">
+          <div className="pointer-events-auto flex flex-wrap items-center justify-end gap-1.5 md:gap-2 max-w-[168px] sm:max-w-none shrink-0">
             <button
               type="button"
               tabIndex={-1}
@@ -238,7 +238,7 @@ export const GameHud: React.FC<GameHudProps> = ({
                 e.currentTarget.blur();
                 onOpenStages();
               }}
-              className="h-9 px-2.5 md:px-3 bg-[#0f1723]/90 hover:bg-[#1a2638] border border-slate-700/80 rounded-md text-xs font-medium text-slate-200 shadow-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="h-10 px-3 md:px-3.5 bg-[#0f1723]/90 hover:bg-[#1a2638] border border-slate-700/80 rounded-md text-xs font-semibold text-slate-200 shadow-md transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               aria-label="Open stage select"
             >
               Stages
@@ -250,7 +250,7 @@ export const GameHud: React.FC<GameHudProps> = ({
                 e.currentTarget.blur();
                 onToggleFullscreen();
               }}
-              className="w-9 h-9 flex items-center justify-center bg-[#0f1723]/90 hover:bg-[#1a2638] border border-slate-700/80 rounded-md text-slate-200 shadow-md transition-colors cursor-pointer"
+              className="w-10 h-10 flex items-center justify-center bg-[#0f1723]/90 hover:bg-[#1a2638] border border-slate-700/80 rounded-md text-slate-200 shadow-md transition-colors cursor-pointer"
               aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
               title="Fullscreen [V]"
             >
@@ -271,7 +271,7 @@ export const GameHud: React.FC<GameHudProps> = ({
                 e.currentTarget.blur();
                 onToggleMute();
               }}
-              className="w-9 h-9 flex items-center justify-center bg-[#0f1723]/90 hover:bg-[#1a2638] border border-slate-700/80 rounded-md text-slate-200 shadow-md transition-colors cursor-pointer"
+              className="w-10 h-10 flex items-center justify-center bg-[#0f1723]/90 hover:bg-[#1a2638] border border-slate-700/80 rounded-md text-slate-200 shadow-md transition-colors cursor-pointer"
               aria-label={muted ? 'Unmute sound' : 'Mute sound'}
               title="Mute [M]"
             >
@@ -294,7 +294,7 @@ export const GameHud: React.FC<GameHudProps> = ({
                 e.currentTarget.blur();
                 onRestart();
               }}
-              className="w-9 h-9 flex items-center justify-center bg-[#0f1723]/90 hover:bg-[#1a2638] border border-slate-700/80 rounded-md text-slate-200 shadow-md transition-colors cursor-pointer"
+              className="w-10 h-10 flex items-center justify-center bg-[#0f1723]/90 hover:bg-[#1a2638] border border-slate-700/80 rounded-md text-slate-200 shadow-md transition-colors cursor-pointer"
               aria-label="Restart stage"
               title="Restart Stage [R]"
             >
@@ -310,7 +310,7 @@ export const GameHud: React.FC<GameHudProps> = ({
                 e.currentTarget.blur();
                 onPause();
               }}
-              className="w-9 h-9 flex items-center justify-center bg-[#0f1723]/90 hover:bg-[#1a2638] border border-slate-700/80 rounded-md text-slate-200 shadow-md transition-colors cursor-pointer"
+              className="w-10 h-10 flex items-center justify-center bg-[#0f1723]/90 hover:bg-[#1a2638] border border-slate-700/80 rounded-md text-slate-200 shadow-md transition-colors cursor-pointer"
               aria-label="Pause game"
               title="Pause [P]"
             >

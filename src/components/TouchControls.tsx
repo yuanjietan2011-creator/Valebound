@@ -110,8 +110,8 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
     : {
         width: JOYSTICK_SIZE,
         height: JOYSTICK_SIZE,
-        left: 16,
-        bottom: 16,
+        left: 12,
+        bottom: 12,
       };
 
   return (
@@ -138,9 +138,9 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
           }
         }}
         onPointerCancel={resetStick}
-        className="fixed left-0 bottom-0 z-20 w-[47vw] max-w-[240px] h-[30vh] min-h-[168px] max-h-[245px] touch-none select-none border-t border-r border-slate-300/12 rounded-tr-3xl"
+        className="fixed left-0 bottom-0 z-20 w-[42vw] max-w-[215px] h-[25vh] min-h-[164px] max-h-[212px] touch-none select-none border-t border-r border-slate-300/12 rounded-tr-3xl"
       >
-        {/* Bigger Virtual Thumb Joystick */}
+        {/* Virtual Thumb Joystick (140px kept consistent) */}
         <div
           role="group"
           aria-label="Movement joystick"
@@ -156,8 +156,8 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
         </div>
       </div>
 
-      {/* Right-Hand Action Buttons */}
-      <div className="fixed right-3 bottom-4 z-20 pointer-events-auto flex items-end gap-2 touch-none">
+      {/* Right-Hand Action Buttons (slightly larger for comfortable thumb taps) */}
+      <div className="fixed right-2.5 bottom-3 z-20 pointer-events-auto flex items-end gap-2 touch-none">
         <button
           type="button"
           tabIndex={-1}
@@ -166,7 +166,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
             e.preventDefault();
             onActionButton('potion', true);
           }}
-          className="w-12 h-12 rounded-full bg-emerald-900/90 disabled:opacity-40 border border-emerald-500/80 text-emerald-100 font-semibold text-[11px] shadow-md"
+          className="w-[54px] h-[54px] rounded-full bg-emerald-900/90 disabled:opacity-40 border border-emerald-500/80 text-emerald-100 font-semibold text-xs shadow-md"
           aria-label="Use potion"
         >
           Heal
@@ -180,7 +180,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
             onActionButton('cast', true);
           }}
           onPointerUp={() => onActionButton('cast', false)}
-          className={`relative w-14 h-14 rounded-full border-2 font-semibold text-xs shadow-md overflow-hidden flex flex-col items-center justify-center leading-tight ${
+          className={`relative w-16 h-16 rounded-full border-2 font-semibold text-[13px] shadow-md overflow-hidden flex flex-col items-center justify-center leading-tight ${
             isReloading
               ? 'bg-slate-900/90 border-amber-500/50 text-amber-300/85'
               : 'bg-amber-950/90 active:bg-amber-800 border-amber-500/80 text-amber-200'
@@ -209,7 +209,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
           onPointerUp={() => onActionButton('jump', false)}
           onPointerCancel={() => onActionButton('jump', false)}
           onPointerLeave={() => onActionButton('jump', false)}
-          className="w-16 h-16 rounded-full bg-amber-500 active:bg-amber-400 border-2 border-amber-200 text-slate-950 font-bold text-sm shadow-lg"
+          className="w-[72px] h-[72px] rounded-full bg-amber-500 active:bg-amber-400 border-2 border-amber-200 text-slate-950 font-bold text-[15px] shadow-lg"
           aria-label="Jump"
         >
           Jump

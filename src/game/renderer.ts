@@ -3,7 +3,7 @@ import type { EnemyEntity, PickupEntity, PlayerEntity, WeatherKind } from './typ
 import type { WorldState } from './physics';
 
 export const VIRTUAL_HEIGHT = GRID_ROWS * TILE_SIZE; // 512
-export const MIN_VIEW_WIDTH_VIRTUAL = 480; // >= 15 tiles visible horizontally on portrait phones
+export const MIN_VIEW_WIDTH_VIRTUAL = 340; // Balanced ~10.6-tile view so Vesper & world stay large and clear on phones
 
 export function renderWorld(
   ctx: CanvasRenderingContext2D,
@@ -22,7 +22,7 @@ export function renderWorld(
   const extraHeightVirtual = Math.max(0, viewHeightVirtual - VIRTUAL_HEIGHT);
   // Shift world into the upper-middle band on tall portrait phones so top HUD
   // sits in sky above and bottom joystick/buttons sit in bedrock below.
-  const worldOffsetY = Math.round(extraHeightVirtual * 0.36);
+  const worldOffsetY = Math.round(extraHeightVirtual * 0.22);
 
   // Smooth camera tracking (with title framing near start shrine)
   const targetCamX = isTitleMode
