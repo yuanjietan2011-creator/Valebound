@@ -6,6 +6,7 @@ import type {
   PickupSpawn,
   RelicId,
   StageDefinition,
+  WeatherKind,
 } from './types';
 
 export const TILE_SIZE = 32;
@@ -124,6 +125,119 @@ export const BIOME_PALETTES: Record<BiomeId, BiomePalette> = {
   },
 };
 
+interface StageTheme {
+  name: string;
+  subtitle: string;
+  biome: BiomeId;
+  weatherPool: WeatherKind[];
+  relicReward?: RelicId;
+  hasBoss: boolean;
+}
+
+const STAGE_THEMES: StageTheme[] = [
+  {
+    name: 'Whispering Meadow',
+    subtitle: 'Sunlit outskirts of the first shrine',
+    biome: 'meadow',
+    weatherPool: ['clouds', 'leaves', 'fireflies'],
+    relicReward: 'swift_boots',
+    hasBoss: false,
+  },
+  {
+    name: 'Mossy Aqueduct',
+    subtitle: 'Weathered stone arches above the reservoir',
+    biome: 'aqueduct',
+    weatherPool: ['rain', 'mist', 'clouds'],
+    hasBoss: false,
+  },
+  {
+    name: 'Bramble Hollow',
+    subtitle: 'Briar thickets hiding ancient woodland wards',
+    biome: 'bramble',
+    weatherPool: ['leaves', 'fireflies', 'mist'],
+    relicReward: 'iron_cloak',
+    hasBoss: false,
+  },
+  {
+    name: 'Sunken Ruins',
+    subtitle: 'Crumbling flagstones of the valley temples',
+    biome: 'ruins',
+    weatherPool: ['mist', 'rain', 'dust'],
+    hasBoss: false,
+  },
+  {
+    name: 'Amber Quarry',
+    subtitle: 'Terraced mine shafts and timber lifts',
+    biome: 'quarry',
+    weatherPool: ['dust', 'embers', 'clouds'],
+    relicReward: 'sunstone',
+    hasBoss: true,
+  },
+  {
+    name: 'Twilight Causeway',
+    subtitle: 'Dusk-lit spans suspended over deep mist',
+    biome: 'twilight',
+    weatherPool: ['fireflies', 'mist', 'leaves'],
+    hasBoss: false,
+  },
+  {
+    name: 'Obsidian Crypt',
+    subtitle: 'Subterranean vaults lit by ember braziers',
+    biome: 'crypt',
+    weatherPool: ['embers', 'ash', 'mist'],
+    hasBoss: false,
+  },
+  {
+    name: 'Frostspire Ridge',
+    subtitle: 'Wind-scoured glacial ledges above the cloudline',
+    biome: 'frost',
+    weatherPool: ['snow', 'mist', 'clouds'],
+    hasBoss: false,
+  },
+  {
+    name: 'Clockwork Bastion',
+    subtitle: 'Interlocking brass pendulums guarding the citadel',
+    biome: 'clockwork',
+    weatherPool: ['steam', 'dust', 'embers'],
+    hasBoss: false,
+  },
+  {
+    name: 'Citadel of the Ash King',
+    subtitle: 'The tenth shrine awaits beyond the Ash Warden',
+    biome: 'citadel',
+    weatherPool: ['ash', 'embers', 'steam'],
+    hasBoss: true,
+  },
+];
+
+function randFloat(): number {
+  if (typeof globalThis.crypto?.getRandomValues === 'function') {
+    const arr = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(arr);
+    return arr[0] / 0x100000000;
+  }
+  return Math.random();
+}
+
+function randInt(min: number, max: number): number {
+  return min + Math.floor(randFloat() * (max - min + 1));
+}
+
+function pick<T>(items: readonly T[]): T {
+  return items[Math.floor(randFloat() * items.length)];
+}
+
+function shuffle<T>(items: readonly T[]): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(randFloat() * (i + 1));
+    const tmp = copy[i];
+    copy[i] = copy[j];
+    copy[j] = tmp;
+  }
+  return copy;
+}
+
 class GridBuilder {
   private cells: string[][];
   readonly cols: number;
@@ -172,7 +286,12 @@ class GridBuilder {
     return this;
   }
 
-  addPlatform(startX: number, endX: number, row: number, ch: 'S' | 'B' | '=' | '~' | '#' = 'S'): this {
+  addPlatform(
+    startX: number,
+    endX: number,
+    row: number,
+    ch: 'S' | 'B' | '=' | '~' | '#' = 'S'
+  ): this {
     for (let x = startX; x <= endX; x++) {
       this.setTile(x, row, ch);
     }
@@ -294,598 +413,519 @@ class GridBuilder {
   }
 }
 
-function buildStage1(): StageDefinition {
-  const b = new GridBuilder(76);
-  b.fillGround(0, 75, 13)
-    .addPit(18, 19)
-    .addPit(42, 44)
-    .addPit(58, 59);
+type GroundEnemyType = 'slime' | 'hopper' | 'sentinel';
 
-  // Intro bricks & chest
-  b.addPlatform(10, 14, 9, 'B')
-    .addChest(12, 9, 'xp_gem')
-    .addCoinLine(10, 5, 8);
+function pickGroundEnemy(stageIndex: number): GroundEnemyType {
+  if (stageIndex === 0) {
+    return randFloat() < 0.7 ? 'slime' : 'hopper';
+  }
+  if (stageIndex <= 2) {
+    return pick(['slime', 'hopper', 'hopper'] as const);
+  }
+  if (stageIndex <= 5) {
+    return pick(['slime', 'hopper', 'sentinel'] as const);
+  }
+  return pick(['hopper', 'sentinel', 'sentinel'] as const);
+}
 
-  // First pit jump arc
-  b.addCoinArc(18.5, 9, 3);
+function randomChestReward(
+  relicForChunk?: RelicId
+): { reward: 'coin' | 'xp_gem' | 'potion' | 'relic'; relicId?: RelicId } {
+  if (relicForChunk) {
+    return { reward: 'relic', relicId: relicForChunk };
+  }
+  const r = randFloat();
+  if (r < 0.48) return { reward: 'xp_gem' };
+  if (r < 0.78) return { reward: 'potion' };
+  return { reward: 'coin' };
+}
 
-  // Elevated wooden bridge + relic chest
-  b.addPlatform(23, 28, 10, '=')
-    .addChest(25, 6, 'relic', 'swift_boots')
-    .addPlatform(24, 26, 6, 'B');
+type ChunkKind =
+  | 'brick_plaza'
+  | 'pit_leap'
+  | 'sky_bridge'
+  | 'spike_bypass'
+  | 'stair_tower'
+  | 'moving_ferry'
+  | 'crumble_dash'
+  | 'dual_deck'
+  | 'pillar_run'
+  | 'vaulted_hall';
 
-  // Second meadow section
-  b.addStairs(33, 3, 12, 1)
-    .addPlatform(36, 39, 10, 'S')
-    .addChest(37, 6, 'potion')
-    .addCoinArc(43, 9, 3);
+function buildRandomChunk(
+  b: GridBuilder,
+  startX: number,
+  kind: ChunkKind,
+  stageIndex: number,
+  relicForChunk?: RelicId
+): number {
+  switch (kind) {
+    case 'brick_plaza': {
+      const width = randInt(10, 13);
+      const platLen = randInt(4, 6);
+      const platRow = pick([9, 10] as const);
+      const platStart = startX + randInt(2, Math.max(2, width - platLen - 2));
+      const platEnd = platStart + platLen - 1;
+      const mat = pick(['B', 'S', '='] as const);
+      b.fillGround(startX, startX + width - 1, 13);
+      b.addPlatform(platStart, platEnd, platRow, mat);
 
-  // East approach
-  b.addPlatform(48, 53, 9, 'B')
-    .addChest(50, 9, 'xp_gem')
-    .addPickup('xp_gem', 51, 8)
-    .addStairs(61, 4, 12, 1)
-    .addPlatform(65, 66, 9, 'S')
-    .addCoinLine(65, 2, 8);
+      const chestX = randInt(platStart + 1, Math.max(platStart + 1, platEnd - 1));
+      const { reward, relicId } = randomChestReward(relicForChunk);
+      b.addChest(chestX, mat === 'B' ? platRow : platRow - 3, reward, relicId);
 
-  b.addEnemy('slime', 15, 12, 11, 17)
-    .addEnemy('slime', 30, 12, 24, 32)
-    .addEnemy('hopper', 50, 12, 46, 56);
+      if (randFloat() < 0.75) {
+        b.addCoinLine(platStart, Math.min(4, platLen), platRow - 1);
+      } else {
+        b.addPickup('xp_gem', chestX, platRow - 1);
+      }
 
-  return {
-    index: 0,
-    name: 'Whispering Meadow',
-    subtitle: 'Sunlit outskirts of the first shrine',
-    biome: 'meadow',
-    weather: 'clouds',
-    palette: BIOME_PALETTES.meadow,
-    grid: b.buildGrid(),
+      const enemyType = pickGroundEnemy(stageIndex);
+      const ex = randInt(startX + 2, startX + width - 3);
+      b.addEnemy(enemyType, ex, 12, startX + 1, startX + width - 2);
+      return startX + width;
+    }
+
+    case 'pit_leap': {
+      const pre = randInt(2, 3);
+      const pitW = randInt(2, 3);
+      const post = randInt(4, 5);
+      const total = pre + pitW + post;
+      const pitStart = startX + pre;
+      const pitEnd = pitStart + pitW - 1;
+
+      b.fillGround(startX, pitStart - 1, 13);
+      b.fillGround(pitEnd + 1, startX + total - 1, 13);
+      b.addCoinArc(pitStart + Math.floor(pitW / 2), randInt(8, 10), 3);
+
+      if (relicForChunk) {
+        const rx = pitEnd + 2;
+        b.addPlatform(rx - 1, rx + 1, 9, 'B');
+        b.addChest(rx, 9, 'relic', relicForChunk);
+      } else if (randFloat() < 0.65) {
+        const ex = pitEnd + randInt(1, post - 2);
+        b.addEnemy(pickGroundEnemy(stageIndex), ex, 12, pitEnd + 1, startX + total - 1);
+      }
+      return startX + total;
+    }
+
+    case 'sky_bridge': {
+      const pre = 2;
+      const pitW = randInt(6, 8);
+      const post = 3;
+      const total = pre + pitW + post;
+      const pitStart = startX + pre;
+      const pitEnd = pitStart + pitW - 1;
+
+      b.fillGround(startX, pitStart - 1, 13);
+      b.fillGround(pitEnd + 1, startX + total - 1, 13);
+
+      const h1 = randInt(10, 11);
+      const h2 = randInt(9, 10);
+      const mat1 = pick(['=', 'S'] as const);
+      const mat2 = pick(['=', 'S'] as const);
+      b.addPlatform(pitStart + 1, pitStart + 2, h1, mat1);
+      b.addPlatform(pitStart + 4, pitEnd - 1, h2, mat2);
+
+      if (relicForChunk) {
+        b.addChest(pitStart + 5, h2 - 3, 'relic', relicForChunk);
+      } else if (randFloat() < 0.7) {
+        b.addCoinArc(pitStart + 3, Math.min(h1, h2) - 2, 3);
+      } else {
+        b.addPickup('xp_gem', pitStart + 5, h2 - 1);
+      }
+
+      if (stageIndex >= 1 && randFloat() < 0.75) {
+        b.addEnemy('wisp', pitStart + 3, randInt(5, 7), pitStart, pitEnd);
+      }
+      return startX + total;
+    }
+
+    case 'spike_bypass': {
+      const width = randInt(11, 14);
+      const spikeW = randInt(2, 3);
+      const spikeStart = startX + randInt(3, width - spikeW - 4);
+      const spikeEnd = spikeStart + spikeW - 1;
+      const bridgeRow = pick([9, 10] as const);
+      const mat = pick(['=', 'B'] as const);
+
+      b.fillGround(startX, startX + width - 1, 13);
+      b.addSpikes(spikeStart, spikeEnd, 12);
+      b.addPlatform(spikeStart - 1, spikeEnd + 1, bridgeRow, mat);
+
+      if (relicForChunk) {
+        b.addChest(spikeStart, mat === 'B' ? bridgeRow : bridgeRow - 3, 'relic', relicForChunk);
+      } else if (randFloat() < 0.65) {
+        const { reward, relicId } = randomChestReward();
+        b.addChest(spikeStart + 1, mat === 'B' ? bridgeRow : bridgeRow - 3, reward, relicId);
+      } else {
+        b.addCoinLine(spikeStart - 1, spikeW + 2, bridgeRow - 1);
+      }
+
+      if (randFloat() < 0.75) {
+        const afterStart = spikeEnd + 1;
+        if (startX + width - afterStart >= 3) {
+          b.addEnemy(
+            pickGroundEnemy(stageIndex),
+            afterStart + 1,
+            12,
+            afterStart,
+            startX + width - 1
+          );
+        }
+      }
+      return startX + width;
+    }
+
+    case 'stair_tower': {
+      const width = randInt(11, 14);
+      const steps = randInt(2, 3);
+      const stairStart = startX + 2;
+      const deckStart = stairStart + steps;
+      const deckEnd = deckStart + randInt(2, 4);
+      const deckRow = 13 - steps;
+
+      b.fillGround(startX, startX + width - 1, 13);
+      b.addStairs(stairStart, steps, 12, 1);
+      b.addPlatform(deckStart, deckEnd, deckRow, 'S');
+
+      const chestX = randInt(deckStart, deckEnd);
+      const { reward, relicId } = randomChestReward(relicForChunk);
+      b.addChest(chestX, deckRow - 3, reward, relicId);
+      b.addCoinLine(deckStart, deckEnd - deckStart + 1, deckRow - 1);
+
+      if (deckEnd + 2 < startX + width - 1) {
+        b.addEnemy(
+          pickGroundEnemy(stageIndex),
+          deckEnd + 2,
+          12,
+          deckEnd + 1,
+          startX + width - 1
+        );
+      }
+      return startX + width;
+    }
+
+    case 'moving_ferry': {
+      const pre = 2;
+      const pitW = randInt(7, 10);
+      const post = 3;
+      const total = pre + pitW + post;
+      const pitStart = startX + pre;
+      const pitEnd = pitStart + pitW - 1;
+
+      b.fillGround(startX, pitStart - 1, 13);
+      b.fillGround(pitEnd + 1, startX + total - 1, 13);
+
+      const ferryRow = randInt(10, 11);
+      const speed = Number((1.3 + randFloat() * 0.55).toFixed(2));
+      b.addMovingPlatform(
+        pitStart + 1,
+        ferryRow,
+        3,
+        (pitW - 4) * TILE_SIZE,
+        0,
+        speed
+      );
+      b.addCoinArc(pitStart + Math.floor(pitW / 2), ferryRow - 3, 3);
+
+      if (relicForChunk) {
+        b.addPlatform(pitStart + 3, pitStart + 5, 7, '=');
+        b.addChest(pitStart + 4, 4, 'relic', relicForChunk);
+      }
+
+      if (stageIndex >= 2 && randFloat() < 0.7) {
+        b.addEnemy('wisp', pitStart + Math.floor(pitW / 2), 6, pitStart, pitEnd);
+      }
+      return startX + total;
+    }
+
+    case 'crumble_dash': {
+      const pre = 2;
+      const pitW = randInt(6, 9);
+      const post = 3;
+      const total = pre + pitW + post;
+      const pitStart = startX + pre;
+      const pitEnd = pitStart + pitW - 1;
+
+      b.fillGround(startX, pitStart - 1, 13);
+      b.fillGround(pitEnd + 1, startX + total - 1, 13);
+
+      const h1 = randInt(10, 11);
+      const h2 = randInt(9, 10);
+      b.addPlatform(pitStart + 1, pitStart + 2, h1, '~');
+      if (pitW >= 8) {
+        b.addPlatform(pitStart + 4, pitStart + 5, h2, '~');
+        b.addPlatform(pitStart + 7, pitEnd - 1, h1, '~');
+      } else {
+        b.addPlatform(pitStart + 4, pitEnd - 1, h2, '~');
+      }
+      b.addCoinArc(pitStart + Math.floor(pitW / 2), Math.min(h1, h2) - 2, 3);
+
+      if (relicForChunk) {
+        b.addChest(pitEnd + 2, 9, 'relic', relicForChunk);
+      }
+      if (stageIndex >= 2 && randFloat() < 0.65) {
+        b.addEnemy('wisp', pitStart + 3, 6, pitStart, pitEnd);
+      }
+      return startX + total;
+    }
+
+    case 'dual_deck': {
+      const width = randInt(12, 15);
+      const midStart = startX + 3;
+      const midEnd = startX + width - 4;
+      const midRow = 10;
+      const topRow = 6;
+      const topStart = midStart + 1;
+      const topEnd = Math.min(midEnd, topStart + 3);
+
+      b.fillGround(startX, startX + width - 1, 13);
+      b.addPlatform(midStart, midEnd, midRow, '=');
+      b.addPlatform(topStart, topEnd, topRow, '=');
+
+      const { reward, relicId } = randomChestReward(relicForChunk);
+      b.addChest(topStart + 1, topRow - 3, reward, relicId);
+      b.addPickup('xp_gem', topEnd, topRow - 1);
+      b.addCoinLine(midStart, Math.min(4, midEnd - midStart + 1), midRow - 1);
+
+      b.addEnemy(
+        pickGroundEnemy(stageIndex),
+        startX + Math.floor(width / 2),
+        12,
+        startX + 1,
+        startX + width - 2
+      );
+      if (stageIndex >= 3 && randFloat() < 0.65) {
+        b.addEnemy('hopper', midStart + 1, midRow - 1, midStart, midEnd);
+      }
+      return startX + width;
+    }
+
+    case 'pillar_run': {
+      const width = randInt(12, 15);
+      b.fillGround(startX, startX + width - 1, 13);
+
+      const p1 = startX + 3;
+      const p2 = startX + 7;
+      const p3 = startX + 10;
+      const h1 = randInt(10, 11);
+      const h2 = randInt(9, 10);
+
+      b.addColumn(p1, h1, 12, 'S');
+      b.addPickup('coin', p1, h1 - 1);
+
+      if (stageIndex >= 1) {
+        b.addSpikes(p1 + 1, p2 - 1, 12);
+      }
+      b.addColumn(p2, h2, 12, 'S');
+      b.addPickup('coin', p2, h2 - 1);
+
+      if (p3 < startX + width - 2) {
+        if (stageIndex >= 2) {
+          b.addSpikes(p2 + 1, p3 - 1, 12);
+        }
+        b.addColumn(p3, h1, 12, 'S');
+        if (relicForChunk) {
+          b.addChest(p3, h1 - 3, 'relic', relicForChunk);
+        } else {
+          b.addPickup('xp_gem', p3, h1 - 1);
+        }
+      } else if (relicForChunk) {
+        b.addChest(p2, h2 - 3, 'relic', relicForChunk);
+      }
+
+      if (stageIndex >= 2 && randFloat() < 0.6) {
+        b.addEnemy('wisp', p2, 6, p1, p2 + 3);
+      }
+      return startX + width;
+    }
+
+    case 'vaulted_hall': {
+      const width = randInt(13, 16);
+      const hallStart = startX + 2;
+      const hallEnd = startX + width - 3;
+      const midStart = hallStart + 2;
+      const midEnd = hallEnd - 2;
+
+      b.fillGround(startX, startX + width - 1, 13);
+      b.addPlatform(hallStart, hallEnd, 4, 'S');
+      b.addPlatform(midStart, midEnd, 9, 'B');
+
+      const chestX = randInt(midStart + 1, Math.max(midStart + 1, midEnd - 1));
+      const { reward, relicId } = randomChestReward(relicForChunk);
+      b.addChest(chestX, 9, reward, relicId);
+      b.addCoinLine(midStart, Math.min(4, midEnd - midStart + 1), 8);
+
+      b.addEnemy(
+        pickGroundEnemy(stageIndex),
+        startX + Math.floor(width / 2),
+        12,
+        startX + 1,
+        startX + width - 2
+      );
+      if (stageIndex >= 4 && midEnd - midStart >= 3 && randFloat() < 0.65) {
+        b.addEnemy('slime', midStart + 1, 8, midStart, midEnd);
+      }
+      return startX + width;
+    }
+  }
+}
+
+export function generateStage(index: number): StageDefinition {
+  const clampedIdx = Math.max(0, Math.min(STAGE_THEMES.length - 1, index));
+  const theme = STAGE_THEMES[clampedIdx];
+  const weather = pick(theme.weatherPool);
+
+  // Stage-appropriate pool of chunk types
+  const chunkPool: ChunkKind[] =
+    clampedIdx === 0
+      ? [
+          'brick_plaza',
+          'pit_leap',
+          'sky_bridge',
+          'stair_tower',
+          'dual_deck',
+          'pillar_run',
+          'spike_bypass',
+        ]
+      : clampedIdx <= 2
+      ? [
+          'brick_plaza',
+          'pit_leap',
+          'sky_bridge',
+          'spike_bypass',
+          'stair_tower',
+          'dual_deck',
+          'pillar_run',
+          'vaulted_hall',
+        ]
+      : [
+          'brick_plaza',
+          'pit_leap',
+          'sky_bridge',
+          'spike_bypass',
+          'stair_tower',
+          'moving_ferry',
+          'crumble_dash',
+          'dual_deck',
+          'pillar_run',
+          'vaulted_hall',
+        ];
+
+  const chunkCount = (clampedIdx >= 5 ? 6 : 5) + randInt(0, 1);
+  const chosenChunks: ChunkKind[] = [];
+  let deck = shuffle(chunkPool);
+  while (chosenChunks.length < chunkCount) {
+    if (deck.length === 0) {
+      deck = shuffle(chunkPool);
+    }
+    const next = deck.pop()!;
+    // Avoid back-to-back identical chunks when possible
+    if (chosenChunks.length > 0 && chosenChunks[chosenChunks.length - 1] === next && deck.length > 0) {
+      chosenChunks.push(deck.pop()!);
+      deck.unshift(next);
+    } else {
+      chosenChunks.push(next);
+    }
+  }
+
+  // Randomize which chunk holds the stage's signature relic (if any)
+  const relicChunkIdx = theme.relicReward ? randInt(1, chunkCount - 1) : -1;
+
+  // Estimate generous buffer capacity then slice cleanly after building
+  const maxCols = 160;
+  const b = new GridBuilder(maxCols);
+
+  // Safe flat opening runway (cols 0..8) so player is never harmed idle at spawn
+  b.fillGround(0, 8, 13);
+  let cursorX = 9;
+
+  for (let i = 0; i < chosenChunks.length; i++) {
+    const relicForChunk = i === relicChunkIdx ? theme.relicReward : undefined;
+    cursorX = buildRandomChunk(b, cursorX, chosenChunks[i], clampedIdx, relicForChunk);
+  }
+
+  // Boss Arena (Stages 5 & 10) with randomized ledges and potion placement
+  if (theme.hasBoss) {
+    const preArena = randInt(3, 5);
+    const arenaW = randInt(25, 29);
+    const totalArenaSpan = preArena + arenaW;
+    b.fillGround(cursorX, cursorX + totalArenaSpan - 1, 13);
+
+    // Pre-boss supply potion at randomized approach tile
+    b.addPickup('potion', cursorX + randInt(1, preArena - 1), 12);
+
+    const gateL = cursorX + preArena;
+    const gateR = gateL + arenaW - 2;
+    b.addColumn(gateL, randInt(10, 11), 12, 'S');
+    b.addColumn(gateR, randInt(10, 11), 12, 'S');
+
+    // 2 randomized elevated vantage ledges inside the arena
+    const ledge1X = gateL + randInt(4, 7);
+    const ledge1W = randInt(3, 5);
+    const ledge1Row = pick([9, 10] as const);
+    b.addPlatform(ledge1X, ledge1X + ledge1W - 1, ledge1Row, '=');
+
+    const ledge2X = gateR - randInt(8, 11);
+    const ledge2W = randInt(3, 5);
+    const ledge2Row = pick([9, 10] as const);
+    b.addPlatform(ledge2X, ledge2X + ledge2W - 1, ledge2Row, '=');
+
+    if (randFloat() < 0.7) {
+      b.addPickup('xp_gem', ledge1X + 1, ledge1Row - 1);
+    }
+
+    const bossSpawnX = Math.floor((gateL + gateR) / 2);
+    b.addEnemy('warden', bossSpawnX, 11, gateL + 2, gateR - 1);
+    cursorX += totalArenaSpan;
+  }
+
+  // Goal Shrine landing zone (always solid & clear)
+  const goalBuffer = randInt(7, 9);
+  b.fillGround(cursorX, cursorX + goalBuffer - 1, 13);
+  const goalX = cursorX + goalBuffer - 4;
+  if (randFloat() < 0.65) {
+    b.addCoinLine(cursorX + 1, 3, 12);
+  }
+  const finalCols = cursorX + goalBuffer;
+
+  // Stage 1 always includes at least 2 slimes for approachable opening pacing
+  if (clampedIdx === 0) {
+    const slimeCount = b.enemies.filter((e) => e.type === 'slime').length;
+    if (slimeCount === 0) {
+      b.addEnemy('slime', cursorX + 2, 12, cursorX, cursorX + 4);
+    }
+  }
+
+  // Trim built grid to exact `finalCols` width
+  const rawGrid = b.buildGrid();
+  const trimmedGrid = rawGrid.map((row) => row.slice(0, finalCols));
+
+  const stage: StageDefinition = {
+    index: clampedIdx,
+    name: theme.name,
+    subtitle: theme.subtitle,
+    biome: theme.biome,
+    weather,
+    palette: BIOME_PALETTES[theme.biome],
+    grid: trimmedGrid,
     spawnTile: { x: 3, y: 12 },
-    goalTile: { x: 71, y: 12 },
+    goalTile: { x: goalX, y: 12 },
     enemies: b.enemies,
     pickups: b.pickups,
     movingPlatforms: b.movingPlatforms,
     chestRewards: b.chestRewards,
     chestRelics: b.chestRelics,
   };
+
+  return stage;
 }
 
-function buildStage2(): StageDefinition {
-  const b = new GridBuilder(82);
-  b.fillGround(0, 81, 13)
-    .addPit(14, 16)
-    .addPit(27, 30)
-    .addPit(46, 48)
-    .addPit(61, 64);
-
-  // Aqueduct piers and bridges
-  b.addPlatform(9, 12, 10, 'S')
-    .addChest(11, 6, 'xp_gem')
-    .addPlatform(17, 25, 11, '=')
-    .addCoinLine(18, 5, 10)
-    .addPlatform(28, 29, 10, 'S')
-    .addCoinArc(28.5, 7, 3);
-
-  // Mid aqueduct arch
-  b.addPlatform(34, 41, 9, 'B')
-    .addChest(37, 9, 'potion')
-    .addChest(39, 9, 'xp_gem')
-    .addPlatform(36, 40, 5, '=')
-    .addPickup('xp_gem', 38, 4);
-
-  // Hopper gap & Wisp lookout
-  b.addPlatform(51, 57, 10, 'S')
-    .addChest(54, 6, 'coin')
-    .addPlatform(62, 63, 10, '=')
-    .addStairs(67, 3, 12, 1)
-    .addCoinLine(71, 4, 11);
-
-  b.addEnemy('slime', 21, 10, 17, 24)
-    .addEnemy('hopper', 36, 12, 32, 44)
-    .addEnemy('wisp', 48, 7, 45, 52)
-    .addEnemy('slime', 54, 9, 51, 57)
-    .addEnemy('hopper', 70, 12, 69, 75);
-
-  return {
-    index: 1,
-    name: 'Mossy Aqueduct',
-    subtitle: 'Weathered stone arches above the reservoir',
-    biome: 'aqueduct',
-    weather: 'rain',
-    palette: BIOME_PALETTES.aqueduct,
-    grid: b.buildGrid(),
-    spawnTile: { x: 3, y: 12 },
-    goalTile: { x: 77, y: 12 },
-    enemies: b.enemies,
-    pickups: b.pickups,
-    movingPlatforms: b.movingPlatforms,
-    chestRewards: b.chestRewards,
-    chestRelics: b.chestRelics,
-  };
-}
-
-function buildStage3(): StageDefinition {
-  const b = new GridBuilder(86);
-  b.fillGround(0, 85, 13)
-    .addPit(20, 22)
-    .addPit(42, 44)
-    .addPit(63, 66);
-
-  // Thorn bramble floor hazards
-  b.addSpikes(12, 13, 12)
-    .addPlatform(11, 14, 9, '=')
-    .addCoinLine(11, 4, 8);
-
-  // Canopy branch path with Ironweave Cloak
-  b.addPlatform(24, 30, 10, '=')
-    .addPlatform(27, 33, 6, '=')
-    .addChest(30, 3, 'relic', 'iron_cloak')
-    .addSpikes(32, 34, 12)
-    .addPlatform(35, 39, 9, 'B')
-    .addChest(37, 9, 'potion');
-
-  // Mid hollow
-  b.addPlatform(46, 52, 10, 'S')
-    .addChest(49, 6, 'xp_gem')
-    .addSpikes(55, 57, 12)
-    .addPlatform(54, 58, 9, '=')
-    .addCoinArc(56, 6, 3);
-
-  // Final climb
-  b.addPlatform(64, 65, 10, '=')
-    .addStairs(69, 4, 12, 1)
-    .addPickup('xp_gem', 72, 8);
-
-  b.addEnemy('slime', 8, 12, 6, 11)
-    .addEnemy('hopper', 26, 12, 23, 31)
-    .addEnemy('wisp', 43, 7, 40, 46)
-    .addEnemy('hopper', 49, 9, 46, 52)
-    .addEnemy('slime', 60, 12, 58, 62)
-    .addEnemy('hopper', 75, 12, 73, 79);
-
-  return {
-    index: 2,
-    name: 'Bramble Hollow',
-    subtitle: 'Briar thickets hiding ancient woodland wards',
-    biome: 'bramble',
-    weather: 'leaves',
-    palette: BIOME_PALETTES.bramble,
-    grid: b.buildGrid(),
-    spawnTile: { x: 3, y: 12 },
-    goalTile: { x: 81, y: 12 },
-    enemies: b.enemies,
-    pickups: b.pickups,
-    movingPlatforms: b.movingPlatforms,
-    chestRewards: b.chestRewards,
-    chestRelics: b.chestRelics,
-  };
-}
-
-function buildStage4(): StageDefinition {
-  const b = new GridBuilder(88);
-  b.fillGround(0, 87, 13)
-    .addPit(15, 22)
-    .addPit(38, 43)
-    .addPit(60, 67);
-
-  // Crumbling ruin bridge over first chasm
-  b.addPlatform(16, 17, 11, '~')
-    .addPlatform(19, 20, 10, '~')
-    .addCoinArc(18, 7, 3);
-
-  // Ruin sanctuary
-  b.addPlatform(25, 32, 9, 'S')
-    .addChest(28, 5, 'xp_gem')
-    .addChest(30, 9, 'potion')
-    .addPickup('xp_gem', 29, 8);
-
-  // Second crumbling gap
-  b.addPlatform(39, 41, 11, '~')
-    .addCoinLine(39, 3, 9);
-
-  // Sentinel courtyard
-  b.addColumn(46, 10, 12, 'S')
-    .addPlatform(48, 55, 9, 'B')
-    .addChest(51, 9, 'xp_gem')
-    .addSpikes(57, 58, 12);
-
-  // Third chasm with crumbling steps
-  b.addPlatform(61, 62, 11, '~')
-    .addPlatform(64, 65, 9, '~')
-    .addCoinArc(63, 6, 3)
-    .addStairs(71, 3, 12, 1);
-
-  b.addEnemy('slime', 10, 12, 7, 14)
-    .addEnemy('sentinel', 28, 12, 24, 36)
-    .addEnemy('wisp', 40, 7, 37, 44)
-    .addEnemy('sentinel', 51, 12, 47, 56)
-    .addEnemy('hopper', 75, 12, 74, 80);
-
-  return {
-    index: 3,
-    name: 'Sunken Ruins',
-    subtitle: 'Crumbling flagstones of the valley temples',
-    biome: 'ruins',
-    weather: 'mist',
-    palette: BIOME_PALETTES.ruins,
-    grid: b.buildGrid(),
-    spawnTile: { x: 3, y: 12 },
-    goalTile: { x: 83, y: 12 },
-    enemies: b.enemies,
-    pickups: b.pickups,
-    movingPlatforms: b.movingPlatforms,
-    chestRewards: b.chestRewards,
-    chestRelics: b.chestRelics,
-  };
-}
-
-function buildStage5(): StageDefinition {
-  const b = new GridBuilder(90);
-  b.fillGround(0, 89, 13)
-    .addPit(16, 24)
-    .addPit(43, 50)
-    .addPit(68, 74);
-
-  // Quarry scaffold + moving lift
-  b.addPlatform(10, 14, 10, '=')
-    .addChest(12, 6, 'xp_gem')
-    .addMovingPlatform(18, 11, 3, 64, 0, 1.4)
-    .addCoinLine(19, 3, 8);
-
-  // Sunstone Sigil high quarry perch
-  b.addPlatform(27, 36, 10, 'S')
-    .addPlatform(30, 35, 6, '=')
-    .addChest(32, 3, 'relic', 'sunstone')
-    .addSpikes(38, 40, 12)
-    .addPlatform(37, 41, 9, 'B')
-    .addChest(39, 9, 'potion');
-
-  // Vertical lift & mid chasm
-  b.addMovingPlatform(45, 10, 3, 0, 44, 1.6)
-    .addCoinArc(46, 6, 3);
-
-  // Eastern excavation (Mid-Boss Courtyard)
-  b.addPlatform(53, 62, 9, '=')
-    .addChest(57, 5, 'xp_gem')
-    .addPickup('potion', 51, 12)
-    .addMovingPlatform(69, 11, 3, 56, 0, 1.5)
-    .addStairs(77, 3, 12, 1);
-
-  b.addEnemy('hopper', 11, 12, 7, 15)
-    .addEnemy('sentinel', 31, 12, 26, 37)
-    .addEnemy('wisp', 46, 6, 43, 50)
-    .addEnemy('warden', 60, 11, 53, 66)
-    .addEnemy('hopper', 81, 12, 80, 84);
-
-  return {
-    index: 4,
-    name: 'Amber Quarry',
-    subtitle: 'Terraced mine shafts and timber lifts',
-    biome: 'quarry',
-    weather: 'dust',
-    palette: BIOME_PALETTES.quarry,
-    grid: b.buildGrid(),
-    spawnTile: { x: 3, y: 12 },
-    goalTile: { x: 85, y: 12 },
-    enemies: b.enemies,
-    pickups: b.pickups,
-    movingPlatforms: b.movingPlatforms,
-    chestRewards: b.chestRewards,
-    chestRelics: b.chestRelics,
-  };
-}
-
-function buildStage6(): StageDefinition {
-  const b = new GridBuilder(92);
-  b.fillGround(0, 91, 13)
-    .addPit(14, 24)
-    .addPit(35, 45)
-    .addPit(58, 69);
-
-  // Causeway spans
-  b.addPlatform(15, 18, 11, '=')
-    .addPlatform(20, 23, 9, '=')
-    .addCoinArc(19, 6, 3);
-
-  // Stone watchtower
-  b.addPlatform(27, 32, 9, 'S')
-    .addChest(29, 5, 'potion')
-    .addPickup('xp_gem', 31, 8);
-
-  // Sky ferry
-  b.addMovingPlatform(38, 10, 3, 70, 0, 1.5)
-    .addCoinLine(38, 4, 7);
-
-  // Causeway citadel arch
-  b.addPlatform(48, 55, 10, 'B')
-    .addChest(51, 10, 'xp_gem')
-    .addSpikes(50, 52, 12);
-
-  // Triple twilight span
-  b.addPlatform(59, 61, 11, '~')
-    .addPlatform(63, 65, 9, '=')
-    .addPlatform(67, 68, 11, '~')
-    .addChest(64, 5, 'xp_gem')
-    .addCoinLine(72, 4, 11);
-
-  b.addEnemy('wisp', 19, 6, 15, 24)
-    .addEnemy('hopper', 29, 8, 27, 32)
-    .addEnemy('wisp', 40, 6, 36, 45)
-    .addEnemy('sentinel', 53, 12, 47, 57)
-    .addEnemy('wisp', 64, 5, 59, 68)
-    .addEnemy('sentinel', 76, 12, 71, 83);
-
-  return {
-    index: 5,
-    name: 'Twilight Causeway',
-    subtitle: 'Dusk-lit spans suspended over deep mist',
-    biome: 'twilight',
-    weather: 'fireflies',
-    palette: BIOME_PALETTES.twilight,
-    grid: b.buildGrid(),
-    spawnTile: { x: 3, y: 12 },
-    goalTile: { x: 87, y: 12 },
-    enemies: b.enemies,
-    pickups: b.pickups,
-    movingPlatforms: b.movingPlatforms,
-    chestRewards: b.chestRewards,
-    chestRelics: b.chestRelics,
-  };
-}
-
-function buildStage7(): StageDefinition {
-  const b = new GridBuilder(94);
-  b.fillGround(0, 93, 13)
-    .addPit(21, 24)
-    .addPit(46, 51)
-    .addPit(70, 74);
-
-  // Crypt vaulted ceiling blocks
-  b.addPlatform(12, 20, 4, 'S')
-    .addSpikes(14, 16, 12)
-    .addPlatform(13, 17, 9, 'B')
-    .addChest(15, 9, 'xp_gem');
-
-  // Crypt floor & upper sanctum
-  b.addPlatform(27, 36, 9, 'S')
-    .addChest(31, 5, 'potion')
-    .addSpikes(38, 41, 12)
-    .addPlatform(37, 42, 9, '=');
-
-  // Moving crypt slab
-  b.addMovingPlatform(47, 10, 3, 40, 24, 1.6)
-    .addCoinArc(48, 6, 3);
-
-  // Dark guardian hall
-  b.addPlatform(54, 65, 4, 'S')
-    .addPlatform(56, 62, 9, 'B')
-    .addChest(59, 9, 'xp_gem')
-    .addSpikes(64, 66, 12);
-
-  b.addPlatform(71, 73, 10, '~')
-    .addStairs(77, 4, 12, 1)
-    .addChest(80, 5, 'potion');
-
-  b.addEnemy('sentinel', 11, 12, 7, 13)
-    .addEnemy('hopper', 29, 8, 27, 36)
-    .addEnemy('sentinel', 33, 12, 26, 37)
-    .addEnemy('wisp', 48, 6, 45, 52)
-    .addEnemy('sentinel', 58, 12, 53, 63)
-    .addEnemy('hopper', 59, 8, 56, 62)
-    .addEnemy('sentinel', 82, 12, 81, 86);
-
-  return {
-    index: 6,
-    name: 'Obsidian Crypt',
-    subtitle: 'Subterranean vaults lit by ember braziers',
-    biome: 'crypt',
-    weather: 'embers',
-    palette: BIOME_PALETTES.crypt,
-    grid: b.buildGrid(),
-    spawnTile: { x: 3, y: 12 },
-    goalTile: { x: 89, y: 12 },
-    enemies: b.enemies,
-    pickups: b.pickups,
-    movingPlatforms: b.movingPlatforms,
-    chestRewards: b.chestRewards,
-    chestRelics: b.chestRelics,
-  };
-}
-
-function buildStage8(): StageDefinition {
-  const b = new GridBuilder(96);
-  b.fillGround(0, 95, 13)
-    .addPit(14, 24)
-    .addPit(36, 47)
-    .addPit(60, 73);
-
-  // Stepping ice pillars
-  b.addPlatform(15, 17, 11, '~')
-    .addPlatform(19, 21, 9, 'S')
-    .addChest(20, 5, 'xp_gem');
-
-  // Alpine shelf
-  b.addPlatform(27, 33, 10, '=')
-    .addChest(30, 6, 'potion')
-    .addSpikes(29, 31, 12);
-
-  // Crumbling ridge & lift
-  b.addPlatform(37, 39, 10, '~')
-    .addMovingPlatform(42, 10, 3, 48, 0, 1.7)
-    .addCoinArc(42, 6, 3);
-
-  // High spire
-  b.addPlatform(50, 57, 9, 'S')
-    .addPlatform(52, 55, 5, '=')
-    .addPickup('xp_gem', 53, 4)
-    .addPickup('xp_gem', 54, 4);
-
-  // Final frost chasm
-  b.addPlatform(61, 63, 10, '~')
-    .addPlatform(65, 67, 8, 'S')
-    .addPlatform(69, 71, 10, '~')
-    .addChest(66, 4, 'xp_gem')
-    .addStairs(77, 3, 12, 1);
-
-  b.addEnemy('hopper', 10, 12, 7, 13)
-    .addEnemy('wisp', 20, 6, 15, 24)
-    .addEnemy('sentinel', 28, 9, 27, 33)
-    .addEnemy('wisp', 42, 6, 37, 47)
-    .addEnemy('sentinel', 53, 12, 49, 58)
-    .addEnemy('wisp', 66, 5, 61, 72)
-    .addEnemy('hopper', 83, 12, 81, 88);
-
-  return {
-    index: 7,
-    name: 'Frostspire Ridge',
-    subtitle: 'Wind-scoured glacial ledges above the cloudline',
-    biome: 'frost',
-    weather: 'snow',
-    palette: BIOME_PALETTES.frost,
-    grid: b.buildGrid(),
-    spawnTile: { x: 3, y: 12 },
-    goalTile: { x: 91, y: 12 },
-    enemies: b.enemies,
-    pickups: b.pickups,
-    movingPlatforms: b.movingPlatforms,
-    chestRewards: b.chestRewards,
-    chestRelics: b.chestRelics,
-  };
-}
-
-function buildStage9(): StageDefinition {
-  const b = new GridBuilder(100);
-  b.fillGround(0, 99, 13)
-    .addPit(15, 28)
-    .addPit(41, 55)
-    .addPit(68, 80);
-
-  // Synchronized clockwork ferries
-  b.addMovingPlatform(17, 11, 3, 56, 0, 1.8)
-    .addPlatform(22, 24, 9, 'S')
-    .addChest(23, 5, 'xp_gem')
-    .addMovingPlatform(25, 10, 3, 0, 48, 1.6);
-
-  // Gear deck
-  b.addPlatform(31, 38, 9, 'B')
-    .addChest(34, 9, 'potion')
-    .addSpikes(33, 36, 12);
-
-  // Twin brass platforms
-  b.addMovingPlatform(43, 11, 3, 64, 0, 1.9)
-    .addPlatform(48, 50, 8, '=')
-    .addMovingPlatform(51, 10, 3, 56, 0, 1.7)
-    .addCoinArc(49, 5, 3);
-
-  // Bastion stronghold
-  b.addPlatform(58, 65, 9, 'S')
-    .addChest(61, 5, 'xp_gem')
-    .addSpikes(60, 62, 12);
-
-  // Final clockwork run
-  b.addMovingPlatform(70, 11, 3, 64, 0, 1.8)
-    .addPlatform(75, 77, 9, '~')
-    .addStairs(83, 4, 12, 1)
-    .addChest(86, 5, 'potion');
-
-  b.addEnemy('sentinel', 10, 12, 7, 14)
-    .addEnemy('wisp', 23, 5, 17, 27)
-    .addEnemy('hopper', 34, 8, 31, 38)
-    .addEnemy('wisp', 49, 5, 43, 54)
-    .addEnemy('sentinel', 61, 8, 58, 65)
-    .addEnemy('sentinel', 64, 12, 57, 67)
-    .addEnemy('wisp', 74, 6, 70, 79)
-    .addEnemy('hopper', 89, 12, 87, 92);
-
-  return {
-    index: 8,
-    name: 'Clockwork Bastion',
-    subtitle: 'Interlocking brass pendulums guarding the citadel',
-    biome: 'clockwork',
-    weather: 'steam',
-    palette: BIOME_PALETTES.clockwork,
-    grid: b.buildGrid(),
-    spawnTile: { x: 3, y: 12 },
-    goalTile: { x: 95, y: 12 },
-    enemies: b.enemies,
-    pickups: b.pickups,
-    movingPlatforms: b.movingPlatforms,
-    chestRewards: b.chestRewards,
-    chestRelics: b.chestRelics,
-  };
-}
-
-function buildStage10(): StageDefinition {
-  const b = new GridBuilder(104);
-  b.fillGround(0, 103, 13)
-    .addPit(16, 23)
-    .addPit(39, 46)
-    .addPit(60, 65);
-
-  // Outer battlements
-  b.addPlatform(10, 14, 9, 'B')
-    .addChest(12, 9, 'potion')
-    .addMovingPlatform(18, 11, 3, 56, 0, 1.7)
-    .addCoinLine(18, 4, 8);
-
-  // Inner keep
-  b.addPlatform(27, 35, 9, 'S')
-    .addChest(31, 5, 'xp_gem')
-    .addSpikes(29, 32, 12)
-    .addPlatform(40, 42, 10, '~')
-    .addPlatform(43, 45, 9, '~');
-
-  // Pre-boss supply shrine
-  b.addPlatform(50, 56, 9, 'B')
-    .addChest(53, 9, 'potion')
-    .addPickup('xp_gem', 54, 8)
-    .addMovingPlatform(61, 10, 3, 48, 0, 1.6);
-
-  // Boss Arena (cols 68..96) with two raised vantage ledges & pre-boss potion
-  b.addPickup('potion', 66, 12)
-    .addColumn(67, 10, 12, 'S')
-    .addPlatform(73, 77, 9, '=')
-    .addPlatform(85, 89, 9, '=')
-    .addColumn(97, 10, 12, 'S');
-
-  b.addEnemy('sentinel', 11, 12, 7, 15)
-    .addEnemy('wisp', 20, 6, 16, 23)
-    .addEnemy('hopper', 30, 8, 27, 35)
-    .addEnemy('sentinel', 52, 12, 48, 58)
-    .addEnemy('wisp', 63, 6, 60, 65)
-    // Stage 10 Final Boss (randomized variant on load)
-    .addEnemy('warden', 84, 11, 69, 95);
-
-  return {
-    index: 9,
-    name: 'Citadel of the Ash King',
-    subtitle: 'The tenth shrine awaits beyond the Ash Warden',
-    biome: 'citadel',
-    weather: 'ash',
-    palette: BIOME_PALETTES.citadel,
-    grid: b.buildGrid(),
-    spawnTile: { x: 3, y: 12 },
-    goalTile: { x: 100, y: 12 },
-    enemies: b.enemies,
-    pickups: b.pickups,
-    movingPlatforms: b.movingPlatforms,
-    chestRewards: b.chestRewards,
-    chestRelics: b.chestRelics,
-  };
-}
-
-export const STAGES: StageDefinition[] = [
-  buildStage1(),
-  buildStage2(),
-  buildStage3(),
-  buildStage4(),
-  buildStage5(),
-  buildStage6(),
-  buildStage7(),
-  buildStage8(),
-  buildStage9(),
-  buildStage10(),
-];
+export const STAGES: StageDefinition[] = Array.from(
+  { length: STAGE_THEMES.length },
+  (_, idx) => generateStage(idx)
+);
 
 export function isSolidChar(ch: string): boolean {
   return ch === '#' || ch === 'S' || ch === 'B' || ch === '?' || ch === 'U';
@@ -901,7 +941,9 @@ export function validateStage(stage: StageDefinition): {
 } {
   const errors: string[] = [];
   if (stage.grid.length !== GRID_ROWS) {
-    errors.push(`Stage ${stage.index + 1}: expected ${GRID_ROWS} rows, got ${stage.grid.length}`);
+    errors.push(
+      `Stage ${stage.index + 1}: expected ${GRID_ROWS} rows, got ${stage.grid.length}`
+    );
   }
   const cols = stage.grid[0]?.length ?? 0;
   for (let r = 0; r < stage.grid.length; r++) {

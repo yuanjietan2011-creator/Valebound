@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { STAGES, validateStage, TILE_SIZE } from './levels';
+import { generateStage, GRID_ROWS, STAGES, TILE_SIZE, validateStage } from './levels';
 import {
   applyDamageToStats,
   createInitialRpgStats,
@@ -175,8 +175,19 @@ test('all 10 stages have weather configured and player jump stays in sweet spot'
     `Expected jump height in [131, 142]px, got ${jumpHeightPx.toFixed(1)}px`
   );
 
-  // Also verify landing on top of Stage 1's row-9 brick platform (col 10, y = 288px)
-  const w2 = createWorld(STAGES[0], createInitialRpgStats());
+  // Also verify landing on top of a row-9 brick platform (y = 288px)
+  const baseStage = generateStage(0);
+  const cols = baseStage.grid[0].length;
+  const flatRow = '.'.repeat(cols);
+  const gndRow = '#'.repeat(cols);
+  const platGrid = Array.from({ length: GRID_ROWS }, (_, r) =>
+    r >= 13 ? gndRow : flatRow
+  );
+  platGrid[9] =
+    flatRow.slice(0, 10) + 'BBBB' + flatRow.slice(14);
+  const testStage = { ...baseStage, grid: platGrid, enemies: [] };
+
+  const w2 = createWorld(testStage, createInitialRpgStats());
   w2.player.x = 8 * TILE_SIZE;
   stepWorld(
     w2,
@@ -228,13 +239,13 @@ test('Stage 10 boss is durable, randomized across variants, and actively attacks
 });
 
 test('pit fall respawns player at last safe ledge instead of stage start', () => {
-  const world = createWorld(STAGES[0], createInitialRpgStats());
-  // Walk right onto safe ground at col 16 (before pit 18..19)
-  world.player.x = 16 * TILE_SIZE;
+  const world = createWorld(generateStage(0), createInitialRpgStats());
+  // Walk right onto safe ground at col 6 (opening safe runway 0..8)
+  world.player.x = 6 * TILE_SIZE;
   world.player.y = 12 * TILE_SIZE + 2;
   stepWorld(world, emptyInput(), 1 / 60);
   const savedX = world.player.lastSafeX;
-  assert.ok(savedX >= 15 * TILE_SIZE);
+  assert.ok(savedX >= 5.5 * TILE_SIZE);
 
   // Drop into pit
   world.player.x = 18.5 * TILE_SIZE;
@@ -306,4 +317,61 @@ test('shooting holds 5 bullets before requiring reload and refills after reload'
   }
   assert.equal(world.player.boltAmmo, 5);
 });
+
+test('procedural generator produces unique valid layouts per run across all 10 stages', () => {
+  const signatures = new Set<string>();
+  for (let run = 0; run < 8; run++) {
+    const s = generateStage(0);
+    const val = validateStage(s);
+    assert.equal(val.valid, true, `Stage 1 failed validation: ${val.errors.join('; ')}`);
+    const sig = `${s.grid.join('|')}#${s.enemies.map((e) => `${e.type}@${e.tileX}`).join(',')}`;
+    signatures.add(sig);
+  }
+  assert.ok(
+    signatures.size >= 4,
+    `Expected randomized Stage 1 layouts across runs, got only ${signatures.size} unique`
+  );
+
+  // Validate 3 random generations of all 10 stages & idle safety
+  for (let round = 0; round < 3; round++) {
+    for (let idx = 0; idx < 10; idx++) {
+      const stage = generateStage(idx);
+      const val = validateStage(stage);
+      assert.equal(val.valid, true, `Generated stage ${idx + 1} invalid: ${val.errors.join('; ')}`);
+      const w = createWorld(stage, createInitialRpgStats());
+      for (let f = 0; f < 120; f++) {
+        stepWorld(w, emptyInput(), 1 / 60);
+      }
+      assert.equal(w.defeated, false, `Idle player died on generated stage ${idx + 1}`);
+    }
+  }
+});
+
+test('game over triggers when HP hits 0 and Stage 10 shrine clears after boss defeat', () => {
+  // Game Over test
+  const wLose = createWorld(generateStage(0), { ...createInitialRpgStats(), hp: 1 });
+  wLose.player.y = 17 * TILE_SIZE;
+  const loseEv = stepWorld(wLose, emptyInput(), 1 / 60);
+  assert.equal(loseEv.defeat, true);
+  assert.equal(wLose.defeated, true);
+  assert.equal(wLose.stats.hp, 0);
+
+  // Stage 10 Goal locked while boss alive, unlocks after boss KO
+  const s10 = generateStage(9);
+  const wWin = createWorld(s10, createInitialRpgStats());
+  wWin.player.x = s10.goalTile.x * TILE_SIZE;
+  wWin.player.y = s10.goalTile.y * TILE_SIZE;
+  stepWorld(wWin, emptyInput(), 1 / 60);
+  assert.equal(wWin.stageCleared, false, 'Goal shrine must stay locked while boss lives');
+
+  for (const e of wWin.enemies) {
+    if (e.type === 'warden') e.state = 'ko';
+  }
+  wWin.player.x = s10.goalTile.x * TILE_SIZE;
+  wWin.player.y = s10.goalTile.y * TILE_SIZE;
+  const winEv = stepWorld(wWin, emptyInput(), 1 / 60);
+  assert.equal(winEv.stageClear, true);
+  assert.equal(wWin.stageCleared, true);
+});
+
 

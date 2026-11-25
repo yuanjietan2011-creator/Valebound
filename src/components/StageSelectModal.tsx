@@ -31,7 +31,7 @@ export const StageSelectModal: React.FC<StageSelectModalProps> = ({
               The Ten Shrines
             </h2>
             <p className="text-xs text-slate-400 mt-1">
-              Clear each shrine in sequence to unlock the next stage of the vale.
+              Clear each shrine in sequence—every entry reshapes the terrain and encounters.
             </p>
           </div>
           <button

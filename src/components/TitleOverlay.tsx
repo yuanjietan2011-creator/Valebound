@@ -46,8 +46,8 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
           Valebound
         </h1>
         <p className="mt-2 text-sm md:text-base text-slate-200/90 max-w-md hud-stroke leading-relaxed">
-          Guide Vesper the Lantern Nomad across ten shrines. Leap past hazards,
-          gather relics, and gain levels along the road to the Ash Citadel.
+          Guide Vesper the Lantern Nomad across ten ever-shifting shrines. Every
+          run reshapes the path, hazards, and guardians on the road to the Ash Citadel.
         </p>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">

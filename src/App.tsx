@@ -4,7 +4,7 @@ import { GameModal } from './components/GameModal';
 import { StageSelectModal } from './components/StageSelectModal';
 import { TitleOverlay } from './components/TitleOverlay';
 import { soundEngine } from './game/audio';
-import { STAGES } from './game/levels';
+import { generateStage, STAGES } from './game/levels';
 import {
   BOLT_RELOAD_TIME,
   createWorld,
@@ -55,6 +55,7 @@ function saveProgress(data: SavedProgress) {
 }
 
 function syncBodyState(phase: GamePhase) {
+  document.body.dataset.phase = phase;
   if (phase === 'title') {
     document.body.dataset.state = 'title';
   } else if (phase === 'playing') {
@@ -114,7 +115,7 @@ export default function App() {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const worldRef = useRef<WorldState>(
-    createWorld(STAGES[0], createInitialRpgStats())
+    createWorld(generateStage(0), createInitialRpgStats())
   );
   const phaseRef = useRef<GamePhase>(initialPhase);
   const stageStatsSnapshotRef = useRef<RpgStats>(createInitialRpgStats());
@@ -164,7 +165,7 @@ export default function App() {
         ...carryStats,
         relics: [...carryStats.relics],
       };
-      worldRef.current = createWorld(STAGES[clampedIdx], carryStats);
+      worldRef.current = createWorld(generateStage(clampedIdx), carryStats);
       keysHeldRef.current.clear();
       jumpQueuedRef.current = false;
       castQueuedRef.current = false;
@@ -677,6 +678,7 @@ export default function App() {
               ? () => loadStage(0, createInitialRpgStats(), 'playing')
               : handleRestartStage
           }
+          onNewRun={() => loadStage(0, createInitialRpgStats(), 'playing')}
           onOpenStages={handleOpenStages}
           onReturnTitle={handleReturnTitle}
         />
