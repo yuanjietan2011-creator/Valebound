@@ -138,14 +138,14 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
           }
         }}
         onPointerCancel={resetStick}
-        className="fixed left-0 bottom-0 z-20 w-[47vw] max-w-[240px] h-[44vh] min-h-[220px] max-h-[300px] touch-none select-none border-t border-r border-slate-300/12 rounded-tr-3xl"
+        className="fixed left-0 bottom-0 z-20 w-[47vw] max-w-[240px] h-[30vh] min-h-[168px] max-h-[245px] touch-none select-none border-t border-r border-slate-300/12 rounded-tr-3xl"
       >
         {/* Bigger Virtual Thumb Joystick */}
         <div
           role="group"
           aria-label="Movement joystick"
           style={ringStyle}
-          className="absolute rounded-full bg-[#0f1723]/78 border-2 border-slate-400/70 flex items-center justify-center shadow-lg pointer-events-none"
+          className="absolute rounded-full bg-[#0f1723]/70 border-2 border-slate-400/65 flex items-center justify-center shadow-lg pointer-events-none"
         >
           <div
             className="w-14 h-14 rounded-full bg-amber-400/92 border-2 border-slate-900 shadow-md"

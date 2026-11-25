@@ -3,6 +3,7 @@ import type { EnemyEntity, PickupEntity, PlayerEntity, WeatherKind } from './typ
 import type { WorldState } from './physics';
 
 export const VIRTUAL_HEIGHT = GRID_ROWS * TILE_SIZE; // 512
+export const MIN_VIEW_WIDTH_VIRTUAL = 480; // >= 15 tiles visible horizontally on portrait phones
 
 export function renderWorld(
   ctx: CanvasRenderingContext2D,
@@ -12,8 +13,16 @@ export function renderWorld(
   timeSec: number,
   isTitleMode: boolean
 ) {
-  const scale = canvasHeight / VIRTUAL_HEIGHT;
+  const scale = Math.min(
+    canvasHeight / VIRTUAL_HEIGHT,
+    canvasWidth / MIN_VIEW_WIDTH_VIRTUAL
+  );
   const viewWidthVirtual = canvasWidth / scale;
+  const viewHeightVirtual = canvasHeight / scale;
+  const extraHeightVirtual = Math.max(0, viewHeightVirtual - VIRTUAL_HEIGHT);
+  // Shift world into the upper-middle band on tall portrait phones so top HUD
+  // sits in sky above and bottom joystick/buttons sit in bedrock below.
+  const worldOffsetY = Math.round(extraHeightVirtual * 0.36);
 
   // Smooth camera tracking (with title framing near start shrine)
   const targetCamX = isTitleMode
@@ -33,12 +42,26 @@ export function renderWorld(
 
   const pal = world.stage.palette;
 
-  // 1. Sky Gradient
-  const skyGrad = ctx.createLinearGradient(0, 0, 0, VIRTUAL_HEIGHT);
+  // 1. Sky Gradient covering full viewport height
+  const skyGrad = ctx.createLinearGradient(0, worldOffsetY, 0, worldOffsetY + VIRTUAL_HEIGHT);
   skyGrad.addColorStop(0, pal.skyTop);
   skyGrad.addColorStop(1, pal.skyBottom);
   ctx.fillStyle = skyGrad;
-  ctx.fillRect(0, 0, viewWidthVirtual, VIRTUAL_HEIGHT);
+  ctx.fillRect(0, 0, viewWidthVirtual, viewHeightVirtual);
+
+  // Deep abyss backdrop below world bottom on tall portrait viewports
+  if (extraHeightVirtual > 0) {
+    ctx.fillStyle = '#0c131d';
+    ctx.fillRect(
+      0,
+      worldOffsetY + VIRTUAL_HEIGHT,
+      viewWidthVirtual,
+      viewHeightVirtual - (worldOffsetY + VIRTUAL_HEIGHT) + 2
+    );
+  }
+
+  ctx.save();
+  ctx.translate(0, worldOffsetY);
 
   // 2. Calm Parallax Far Silhouettes & Sky Weather Backdrops
   drawSkyClouds(ctx, viewWidthVirtual, camX, timeSec, world.stage.weather);
@@ -54,6 +77,17 @@ export function renderWorld(
     world.cols - 1,
     Math.ceil((camX + viewWidthVirtual) / TILE_SIZE) + 1
   );
+
+  // Extend solid earth columns cleanly into bottom bedrock zone on tall phones
+  if (extraHeightVirtual > 0) {
+    const bedrockH = viewHeightVirtual - (worldOffsetY + VIRTUAL_HEIGHT) + 4;
+    for (let c = startCol; c <= endCol; c++) {
+      if (world.grid[GRID_ROWS - 1][c] === '#') {
+        ctx.fillStyle = pal.groundFill;
+        ctx.fillRect(c * TILE_SIZE, VIRTUAL_HEIGHT - 1, TILE_SIZE + 0.8, bedrockH);
+      }
+    }
+  }
 
   for (let r = 0; r < GRID_ROWS; r++) {
     for (let c = startCol; c <= endCol; c++) {
@@ -216,6 +250,7 @@ export function renderWorld(
   // 12. Foreground Biome Weather Overlay (screen-space, minimal & atmospheric)
   drawWeatherOverlay(ctx, viewWidthVirtual, camX, timeSec, world.stage.weather);
 
+  ctx.restore();
   ctx.restore();
 }
 
