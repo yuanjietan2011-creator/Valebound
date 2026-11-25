@@ -2,14 +2,18 @@ import React from 'react';
 
 interface TitleOverlayProps {
   highestReachedStage: number;
+  isFullscreen: boolean;
   onStart: () => void;
   onOpenStages: () => void;
+  onToggleFullscreen: () => void;
 }
 
 export const TitleOverlay: React.FC<TitleOverlayProps> = ({
   highestReachedStage,
+  isFullscreen,
   onStart,
   onOpenStages,
+  onToggleFullscreen,
 }) => {
   return (
     <div className="fixed inset-0 z-20 flex flex-col justify-between pointer-events-none px-6 py-8 md:px-14 md:py-10">
@@ -62,12 +66,19 @@ export const TitleOverlay: React.FC<TitleOverlayProps> = ({
           >
             Select Stage ({Math.min(10, highestReachedStage + 1)}/10)
           </button>
+          <button
+            type="button"
+            onClick={onToggleFullscreen}
+            className="px-4 py-3 bg-[#14202c]/90 hover:bg-[#1c2d3d] text-slate-100 border border-slate-600/70 font-medium text-sm md:text-base rounded-md shadow-md transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
+          >
+            {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+          </button>
         </div>
       </div>
 
       {/* Bottom flat control hint */}
       <div className="text-xs md:text-sm text-slate-100/90 hud-stroke tracking-wide">
-        WASD or Arrow Keys Move &amp; Jump · F Lantern Bolt · Q Potion · P Pause
+        WASD or Arrow Keys Move &amp; Jump · F Lantern Bolt · Q Potion · V Fullscreen · P Pause
       </div>
     </div>
   );

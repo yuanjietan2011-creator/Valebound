@@ -159,8 +159,7 @@ export function renderWorld(
     world.stage.goalTile.x * TILE_SIZE,
     world.stage.goalTile.y * TILE_SIZE,
     pal.accent,
-    world.stage.index === 9 &&
-      world.enemies.some((e) => e.type === 'warden' && e.state !== 'ko')
+    world.enemies.some((e) => e.type === 'warden' && e.state !== 'ko')
   );
 
   // 6. Pickups
@@ -622,19 +621,68 @@ function drawEnemy(ctx: CanvasRenderingContext2D, e: EnemyEntity) {
     ctx.fillStyle = e.state === 'windup' || e.state === 'attack' ? '#fb7185' : '#fbbf24';
     ctx.fillRect(e.x + (e.facing === 1 ? 14 : 4), e.y + 10, 9, 3);
   } else if (e.type === 'warden') {
+    const variant = e.bossVariant ?? 'ash_warden';
     if (e.state === 'windup') {
-      ctx.strokeStyle = '#fb7185';
+      ctx.strokeStyle =
+        e.bossAttack === 'charge'
+          ? '#fbbf24'
+          : e.bossAttack === 'leap_slam'
+            ? '#38bdf8'
+            : '#fb7185';
       ctx.lineWidth = 2;
       ctx.strokeRect(e.x - 4, e.y - 4, e.w + 8, e.h + 8);
+      if (e.bossAttack === 'charge') {
+        ctx.beginPath();
+        ctx.moveTo(e.x + e.w / 2, e.y + e.h / 2);
+        ctx.lineTo(e.x + e.w / 2 + e.facing * 90, e.y + e.h / 2);
+        ctx.stroke();
+      }
     }
-    ctx.fillStyle = flash ? '#ffffff' : '#4c1d24';
+
+    const bodyColor =
+      variant === 'frost_monarch'
+        ? '#1e3a5f'
+        : variant === 'brass_titan'
+          ? '#57422c'
+          : '#4c1d24';
+    const crownColor =
+      variant === 'frost_monarch'
+        ? '#7dd3fc'
+        : variant === 'brass_titan'
+          ? '#d97706'
+          : '#b45309';
+    const coreColor =
+      e.phase === 2
+        ? '#fb7185'
+        : variant === 'frost_monarch'
+          ? '#38bdf8'
+          : variant === 'brass_titan'
+            ? '#fde047'
+            : '#f59e0b';
+
+    ctx.fillStyle = flash ? '#ffffff' : bodyColor;
     ctx.fillRect(e.x + 2, e.y + 8, e.w - 4, e.h - 8);
-    // Crown horns
-    ctx.fillStyle = flash ? '#ffffff' : '#b45309';
-    ctx.fillRect(e.x + 4, e.y, 7, 10);
-    ctx.fillRect(e.x + e.w - 11, e.y, 7, 10);
+
+    // Distinct Crown / Silhouette per randomized variant
+    ctx.fillStyle = flash ? '#ffffff' : crownColor;
+    if (variant === 'frost_monarch') {
+      // Three glacial spires
+      ctx.fillRect(e.x + 6, e.y + 2, 6, 8);
+      ctx.fillRect(e.x + 19, e.y - 2, 6, 12);
+      ctx.fillRect(e.x + e.w - 12, e.y + 2, 6, 8);
+    } else if (variant === 'brass_titan') {
+      // Wide flat shoulder plates & central gear dome
+      ctx.fillRect(e.x - 2, e.y + 10, 6, 14);
+      ctx.fillRect(e.x + e.w - 4, e.y + 10, 6, 14);
+      ctx.fillRect(e.x + 14, e.y + 2, 16, 8);
+    } else {
+      // Ash Warden twin horns
+      ctx.fillRect(e.x + 4, e.y, 7, 10);
+      ctx.fillRect(e.x + e.w - 11, e.y, 7, 10);
+    }
+
     // Glowing core & visor
-    ctx.fillStyle = e.phase === 2 ? '#fb7185' : '#f59e0b';
+    ctx.fillStyle = coreColor;
     ctx.fillRect(e.x + 12, e.y + 16, e.w - 24, 4);
     ctx.fillRect(e.x + 17, e.y + 26, 10, 10);
   }

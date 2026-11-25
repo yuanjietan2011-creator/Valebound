@@ -69,7 +69,21 @@ export interface WorldState {
   uidCounter: number;
 }
 
-export function createEnemyFromSpawn(spawn: EnemySpawn): EnemyEntity {
+const BOSS_VARIANTS: Array<{
+  variant: 'ash_warden' | 'frost_monarch' | 'brass_titan';
+  name: string;
+  hpFinal: number;
+  hpMid: number;
+}> = [
+  { variant: 'ash_warden', name: 'The Ash Warden', hpFinal: 44, hpMid: 22 },
+  { variant: 'frost_monarch', name: 'The Frost Monarch', hpFinal: 42, hpMid: 20 },
+  { variant: 'brass_titan', name: 'The Brass Titan', hpFinal: 48, hpMid: 24 },
+];
+
+export function createEnemyFromSpawn(
+  spawn: EnemySpawn,
+  stageIndex = 0
+): EnemyEntity {
   const x = spawn.tileX * TILE_SIZE;
   const y = spawn.tileY * TILE_SIZE;
   const minX = (spawn.patrolMinX ?? Math.max(1, spawn.tileX - 3)) * TILE_SIZE;
@@ -180,7 +194,11 @@ export function createEnemyFromSpawn(spawn: EnemySpawn): EnemyEntity {
         grounded: true,
         phase: 0,
       };
-    case 'warden':
+    case 'warden': {
+      const pick =
+        BOSS_VARIANTS[Math.floor(Math.random() * BOSS_VARIANTS.length)];
+      const isFinal = stageIndex >= 9;
+      const bossHp = isFinal ? pick.hpFinal : pick.hpMid;
       return {
         id: spawn.id,
         type: 'warden',
@@ -191,21 +209,25 @@ export function createEnemyFromSpawn(spawn: EnemySpawn): EnemyEntity {
         vx: -60,
         vy: 0,
         facing: -1,
-        hp: 26,
-        maxHp: 26,
-        xpReward: 150,
-        goldReward: 100,
-        contactDamage: 2,
+        hp: bossHp,
+        maxHp: bossHp,
+        xpReward: isFinal ? 180 : 85,
+        goldReward: isFinal ? 120 : 50,
+        contactDamage: 1,
         patrolMinX: minX,
         patrolMaxX: maxX,
         anchorY: y - 16,
         state: 'patrol',
-        stateTimer: 1.3,
+        stateTimer: 1.0,
         hurtFlashTimer: 0,
         koTimer: 0,
         grounded: true,
         phase: 1,
+        bossVariant: pick.variant,
+        bossName: isFinal ? pick.name : `${pick.name} (Vanguard)`,
+        bossAttack: 'volley',
       };
+    }
   }
 }
 
@@ -240,6 +262,8 @@ export function createWorld(stage: StageDefinition, stats: RpgStats): WorldState
     castCooldown: 0,
     walkDistance: 0,
     crouching: false,
+    lastSafeX: stage.spawnTile.x * TILE_SIZE + 4,
+    lastSafeY: stage.spawnTile.y * TILE_SIZE + 2,
   };
 
   const particles: ParticleSlot[] = Array.from({ length: 96 }, () => ({
@@ -290,7 +314,7 @@ export function createWorld(stage: StageDefinition, stats: RpgStats): WorldState
     cols,
     player,
     stats: { ...stats, relics: [...stats.relics] },
-    enemies: stage.enemies.map(createEnemyFromSpawn),
+    enemies: stage.enemies.map((sp) => createEnemyFromSpawn(sp, stage.index)),
     pickups,
     projectiles: [],
     movingPlatforms,
@@ -780,13 +804,20 @@ export function stepWorld(
         p.vy = 0;
         p.grounded = true;
 
-        // Trigger crumble if standing on '~'
-        if (tileAt(world, c, footRow) === '~') {
+        // Trigger crumble if standing on '~' or save safe respawn ledge
+        const standTile = tileAt(world, c, footRow);
+        if (standTile === '~') {
           const cr = world.crumbles.get(`${c},${footRow}`);
           if (cr && cr.state === 'solid') {
             cr.state = 'shaking';
             cr.timer = 0.45;
           }
+        } else if (
+          (standTile === '#' || standTile === 'S') &&
+          tileAt(world, c, footRow - 1) !== '^'
+        ) {
+          p.lastSafeX = p.x;
+          p.lastSafeY = p.y;
         }
         break;
       }
@@ -832,13 +863,12 @@ export function stepWorld(
     }
   }
 
-  // Pit Fall Check (respawn on safe ground if HP > 0, or defeat)
+  // Pit Fall Check (respawn on last safe ledge if HP > 0, or defeat)
   if (p.y > GRID_ROWS * TILE_SIZE + 28) {
-    hurtPlayer(world, 2, 0, events);
+    hurtPlayer(world, 1, 0, events);
     if (!world.defeated) {
-      // Respawn at last safe ground or stage start
-      p.x = world.stage.spawnTile.x * TILE_SIZE + 4;
-      p.y = world.stage.spawnTile.y * TILE_SIZE;
+      p.x = p.lastSafeX;
+      p.y = p.lastSafeY;
       p.vx = 0;
       p.vy = 0;
     }
@@ -1051,67 +1081,117 @@ export function stepWorld(
         }
       }
     } else if (e.type === 'warden') {
-      // Policy 5: Stage 10 Boss (alternates leap slam & dual ember volley)
+      // Policy 5: Randomized Multi-Attack Boss (leap slam, targeted volley, telegraphed charge)
       e.phase = e.hp <= e.maxHp / 2 ? 2 : 1;
-      const speedMult = e.phase === 2 ? 1.28 : 1.0;
+      const speedMult = e.phase === 2 ? 1.22 : 1.0;
 
       if (e.state === 'patrol') {
         e.facing = dxToPlayer >= 0 ? 1 : -1;
         e.x = Math.max(
           e.patrolMinX,
-          Math.min(e.patrolMaxX - e.w, e.x + e.facing * 65 * speedMult * dt)
+          Math.min(e.patrolMaxX - e.w, e.x + e.facing * 68 * speedMult * dt)
         );
         e.stateTimer -= dt;
-        if (e.stateTimer <= 0 && dist < 440) {
+        if (e.stateTimer <= 0 && dist < 480) {
+          const attacks: Array<'leap_slam' | 'volley' | 'charge'> = [
+            'leap_slam',
+            'volley',
+            'charge',
+          ];
+          e.bossAttack = attacks[Math.floor(Math.random() * attacks.length)];
           e.state = 'windup';
-          e.stateTimer = 0.55;
+          e.stateTimer = 0.58;
         }
       } else if (e.state === 'windup') {
+        e.facing = dxToPlayer >= 0 ? 1 : -1;
         e.stateTimer -= dt;
         if (e.stateTimer <= 0) {
-          if (Math.abs(dxToPlayer) > 150) {
+          if (e.bossAttack === 'leap_slam') {
             e.state = 'attack';
-            e.vy = -380;
-            e.vx = e.facing * 210 * speedMult;
+            e.vy = -410;
+            e.vx = e.facing * 195 * speedMult;
             e.grounded = false;
+          } else if (e.bossAttack === 'charge') {
+            e.state = 'attack';
+            e.stateTimer = 0.62;
+            e.vx = e.facing * 245 * speedMult;
+            e.vy = 0;
+            e.grounded = true;
           } else {
-            // Fire twin ember bolts
-            for (const dir of [-1, 1] as const) {
+            // Aimed Volley (2 bolts in Phase 1, 3 bolts in Phase 2) at manageable speed
+            const len = Math.max(1, dist);
+            const baseVx = (dxToPlayer / len) * 195 * speedMult;
+            const baseVy = (dyToPlayer / len) * 195 * speedMult;
+            const offsets = e.phase === 2 ? [-38, 0, 38] : [-22, 22];
+            for (const oy of offsets) {
               world.uidCounter += 1;
               world.projectiles.push({
-                id: `boss_ember_${world.uidCounter}`,
+                id: `boss_orb_${world.uidCounter}`,
                 fromPlayer: false,
                 x: e.x + e.w / 2,
                 y: e.y + 18,
-                vx: dir * 210 * speedMult,
-                vy: -60,
+                vx: baseVx,
+                vy: baseVy + oy,
                 radius: 6,
                 damage: 1,
-                ttl: 2.2,
+                ttl: 2.3,
                 alive: true,
               });
             }
             e.state = 'recover';
-            e.stateTimer = 0.7;
+            e.stateTimer = 0.85;
           }
         }
       } else if (e.state === 'attack') {
-        e.vy = Math.min(MAX_FALL_SPEED, e.vy + GRAVITY * 0.9 * dt);
-        e.x = Math.max(e.patrolMinX, Math.min(e.patrolMaxX - e.w, e.x + e.vx * dt));
-        e.y += e.vy * dt;
-        if (e.y >= e.anchorY) {
-          e.y = e.anchorY;
-          e.vy = 0;
-          e.vx = 0;
-          e.grounded = true;
-          e.state = 'recover';
-          e.stateTimer = 0.65;
+        if (e.bossAttack === 'charge') {
+          e.stateTimer -= dt;
+          e.x = Math.max(
+            e.patrolMinX,
+            Math.min(e.patrolMaxX - e.w, e.x + e.vx * dt)
+          );
+          if (e.stateTimer <= 0) {
+            e.vx = 0;
+            e.state = 'recover';
+            e.stateTimer = 0.85;
+          }
+        } else {
+          // Leap slam arc
+          e.vy = Math.min(MAX_FALL_SPEED, e.vy + GRAVITY * 0.9 * dt);
+          e.x = Math.max(
+            e.patrolMinX,
+            Math.min(e.patrolMaxX - e.w, e.x + e.vx * dt)
+          );
+          e.y += e.vy * dt;
+          if (e.y >= e.anchorY) {
+            e.y = e.anchorY;
+            e.vy = 0;
+            e.vx = 0;
+            e.grounded = true;
+            // Ground shockwave orbs on landing
+            for (const dir of [-1, 1] as const) {
+              world.uidCounter += 1;
+              world.projectiles.push({
+                id: `boss_wave_${world.uidCounter}`,
+                fromPlayer: false,
+                x: e.x + e.w / 2,
+                y: e.y + e.h - 10,
+                vx: dir * 185 * speedMult,
+                vy: 0,
+                radius: 5,
+                damage: 1,
+                ttl: 1.5,
+                alive: true,
+              });
+            }
+            e.state = 'recover';
+            e.stateTimer = 0.85;
+          }
         }
       } else if (e.state === 'recover') {
         e.stateTimer -= dt;
         if (e.stateTimer <= 0) {
           e.state = 'patrol';
-          e.stateTimer = e.phase === 2 ? 0.85 : 1.25;
+          e.stateTimer = e.phase === 2 ? 0.8 : 1.15;
         }
       }
     }
@@ -1223,12 +1303,12 @@ export function stepWorld(
     }
   }
 
-  // 8. Goal Shrine Check (in Stage 10, require Ash Warden defeated)
+  // 8. Goal Shrine Check (require any active stage Boss defeated first)
   const gx = world.stage.goalTile.x * TILE_SIZE;
   const gy = world.stage.goalTile.y * TILE_SIZE;
-  const bossAlive =
-    world.stage.index === 9 &&
-    world.enemies.some((e) => e.type === 'warden' && e.state !== 'ko');
+  const bossAlive = world.enemies.some(
+    (e) => e.type === 'warden' && e.state !== 'ko'
+  );
 
   if (!bossAlive && aabbOverlap(p.x, p.y, p.w, p.h, gx - 6, gy - 32, 44, 64)) {
     world.stageCleared = true;

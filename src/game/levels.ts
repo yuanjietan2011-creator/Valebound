@@ -544,18 +544,18 @@ function buildStage5(): StageDefinition {
   b.addMovingPlatform(45, 10, 3, 0, 44, 1.6)
     .addCoinArc(46, 6, 3);
 
-  // Eastern excavation
-  b.addPlatform(53, 62, 9, 'S')
+  // Eastern excavation (Mid-Boss Courtyard)
+  b.addPlatform(53, 62, 9, '=')
     .addChest(57, 5, 'xp_gem')
+    .addPickup('potion', 51, 12)
     .addMovingPlatform(69, 11, 3, 56, 0, 1.5)
     .addStairs(77, 3, 12, 1);
 
   b.addEnemy('hopper', 11, 12, 7, 15)
     .addEnemy('sentinel', 31, 12, 26, 37)
     .addEnemy('wisp', 46, 6, 43, 50)
-    .addEnemy('sentinel', 57, 8, 53, 62)
-    .addEnemy('hopper', 64, 12, 62, 67)
-    .addEnemy('sentinel', 81, 12, 80, 84);
+    .addEnemy('warden', 60, 11, 53, 66)
+    .addEnemy('hopper', 81, 12, 80, 84);
 
   return {
     index: 4,
@@ -841,8 +841,9 @@ function buildStage10(): StageDefinition {
     .addPickup('xp_gem', 54, 8)
     .addMovingPlatform(61, 10, 3, 48, 0, 1.6);
 
-  // Boss Arena (cols 68..96) with two raised vantage ledges
-  b.addColumn(67, 10, 12, 'S')
+  // Boss Arena (cols 68..96) with two raised vantage ledges & pre-boss potion
+  b.addPickup('potion', 66, 12)
+    .addColumn(67, 10, 12, 'S')
     .addPlatform(73, 77, 9, '=')
     .addPlatform(85, 89, 9, '=')
     .addColumn(97, 10, 12, 'S');
@@ -852,7 +853,7 @@ function buildStage10(): StageDefinition {
     .addEnemy('hopper', 30, 8, 27, 35)
     .addEnemy('sentinel', 52, 12, 48, 58)
     .addEnemy('wisp', 63, 6, 60, 65)
-    // Stage 10 Final Boss: The Ash Warden
+    // Stage 10 Final Boss (randomized variant on load)
     .addEnemy('warden', 84, 11, 69, 95);
 
   return {

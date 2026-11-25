@@ -48,8 +48,8 @@ test('RPG XP progression levels up, increases max HP, and heals to full', () => 
   assert.equal(res.levelsGained, 1);
   assert.equal(res.stats.level, 2);
   assert.equal(res.stats.xp, 10);
-  assert.equal(res.stats.maxHp, 7);
-  assert.equal(res.stats.hp, 7);
+  assert.equal(res.stats.maxHp, stats.maxHp + 1);
+  assert.equal(res.stats.hp, stats.maxHp + 1);
 });
 
 test('RPG relics modify speed, defense, and attack power', () => {
@@ -183,4 +183,57 @@ test('all 10 stages have weather configured and player jump stays in sweet spot'
     w2.player.y <= 9 * TILE_SIZE - w2.player.h + 1,
     `Expected player to land on top of row-9 platform (y <= ${9 * TILE_SIZE - w2.player.h}), got y=${w2.player.y.toFixed(1)}`
   );
+});
+
+test('Stage 10 boss is durable, randomized across variants, and actively attacks player', () => {
+  const seenVariants = new Set<string>();
+  for (let i = 0; i < 25; i++) {
+    const w = createWorld(STAGES[9], createInitialRpgStats());
+    const boss = w.enemies.find((e) => e.type === 'warden');
+    assert.ok(boss, 'Stage 10 must have a boss');
+    assert.ok(boss.maxHp >= 42, `Expected boss HP >= 42, got ${boss.maxHp}`);
+    if (boss.bossVariant) seenVariants.add(boss.bossVariant);
+  }
+  assert.ok(
+    seenVariants.size >= 2,
+    `Expected randomized boss variants, saw: ${[...seenVariants].join(', ')}`
+  );
+
+  // Verify boss enters windup & performs an attack when player approaches
+  const world = createWorld(STAGES[9], createInitialRpgStats());
+  const boss = world.enemies.find((e) => e.type === 'warden')!;
+  world.player.x = boss.x - 160;
+  world.player.y = boss.y + 16;
+
+  let sawAttackOrProjectile = false;
+  for (let step = 0; step < 180; step++) {
+    stepWorld(world, emptyInput(), 1 / 60);
+    if (
+      boss.state === 'windup' ||
+      boss.state === 'attack' ||
+      world.projectiles.some((pr) => !pr.fromPlayer)
+    ) {
+      sawAttackOrProjectile = true;
+      break;
+    }
+  }
+  assert.equal(sawAttackOrProjectile, true, 'Boss should actively telegraph and attack');
+});
+
+test('pit fall respawns player at last safe ledge instead of stage start', () => {
+  const world = createWorld(STAGES[0], createInitialRpgStats());
+  // Walk right onto safe ground at col 16 (before pit 18..19)
+  world.player.x = 16 * TILE_SIZE;
+  world.player.y = 12 * TILE_SIZE + 2;
+  stepWorld(world, emptyInput(), 1 / 60);
+  const savedX = world.player.lastSafeX;
+  assert.ok(savedX >= 15 * TILE_SIZE);
+
+  // Drop into pit
+  world.player.x = 18.5 * TILE_SIZE;
+  world.player.y = 17 * TILE_SIZE;
+  stepWorld(world, emptyInput(), 1 / 60);
+
+  assert.equal(world.defeated, false);
+  assert.equal(world.player.x, savedX);
 });

@@ -60,11 +60,15 @@ function syncBodyState(phase: GamePhase) {
   }
 }
 
+function detectTouchDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  const coarse = window.matchMedia?.('(pointer: coarse)').matches ?? false;
+  const touchPts = (navigator.maxTouchPoints ?? 0) > 0;
+  return coarse || touchPts || window.innerWidth <= 768;
+}
+
 function makeHudSnapshot(world: WorldState, phase: GamePhase): HudSnapshot {
-  const boss =
-    world.stage.index === 9
-      ? world.enemies.find((e) => e.type === 'warden' && e.state !== 'ko')
-      : undefined;
+  const boss = world.enemies.find((e) => e.type === 'warden' && e.state !== 'ko');
   return {
     phase,
     stageIndex: world.stage.index,
@@ -82,7 +86,7 @@ function makeHudSnapshot(world: WorldState, phase: GamePhase): HudSnapshot {
     elapsedSeconds: Math.floor(world.elapsedSeconds),
     bossHp: boss ? Math.max(0, boss.hp) : null,
     bossMaxHp: boss ? boss.maxHp : null,
-    bossName: boss ? 'The Ash Warden' : null,
+    bossName: boss ? (boss.bossName ?? 'The Ash Warden') : null,
     bannerText: world.bannerText,
   };
 }
@@ -105,12 +109,21 @@ export default function App() {
   const jumpQueuedRef = useRef(false);
   const castQueuedRef = useRef(false);
   const potionQueuedRef = useRef(false);
-  const touchStateRef = useRef({ left: false, right: false, jump: false });
+  const touchStateRef = useRef({
+    left: false,
+    right: false,
+    down: false,
+    jump: false,
+  });
   const stageModalOpenRef = useRef(false);
 
   const [phase, setPhase] = useState<GamePhase>(initialPhase);
   const [stageModalOpen, setStageModalOpen] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState<boolean>(() =>
+    detectTouchDevice()
+  );
   const [highestReachedStage, setHighestReachedStage] = useState(
     initialProgress.highestReachedStage
   );
@@ -142,7 +155,12 @@ export default function App() {
       jumpQueuedRef.current = false;
       castQueuedRef.current = false;
       potionQueuedRef.current = false;
-      touchStateRef.current = { left: false, right: false, jump: false };
+      touchStateRef.current = {
+        left: false,
+        right: false,
+        down: false,
+        jump: false,
+      };
       setStageModalOpen(false);
       stageModalOpenRef.current = false;
       setGamePhase(targetPhase);
@@ -230,35 +248,79 @@ export default function App() {
     [loadStage]
   );
 
-  const handleTouchKey = useCallback(
-    (key: 'left' | 'right' | 'jump' | 'cast', pressed: boolean) => {
-      if (key === 'left') touchStateRef.current.left = pressed;
-      if (key === 'right') touchStateRef.current.right = pressed;
-      if (key === 'jump') {
+  const handleToggleFullscreen = useCallback(() => {
+    const doc = document as Document & {
+      webkitFullscreenElement?: Element | null;
+      webkitExitFullscreen?: () => Promise<void>;
+    };
+    const root = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: () => Promise<void>;
+    };
+    const active = Boolean(document.fullscreenElement || doc.webkitFullscreenElement);
+    if (!active) {
+      const req = root.requestFullscreen?.() ?? root.webkitRequestFullscreen?.();
+      if (req && typeof req.catch === 'function') {
+        req.catch(() => {});
+      }
+    } else {
+      const exit = document.exitFullscreen?.() ?? doc.webkitExitFullscreen?.();
+      if (exit && typeof exit.catch === 'function') {
+        exit.catch(() => {});
+      }
+    }
+  }, []);
+
+  const handleJoystickChange = useCallback(
+    (dir: { left: boolean; right: boolean; down: boolean }) => {
+      touchStateRef.current.left = dir.left;
+      touchStateRef.current.right = dir.right;
+      touchStateRef.current.down = dir.down;
+    },
+    []
+  );
+
+  const handleTouchAction = useCallback(
+    (action: 'jump' | 'cast' | 'potion', pressed: boolean) => {
+      if (action === 'jump') {
         if (pressed && !touchStateRef.current.jump) {
           jumpQueuedRef.current = true;
         }
         touchStateRef.current.jump = pressed;
-      }
-      if (key === 'cast' && pressed) {
+      } else if (action === 'cast' && pressed) {
         castQueuedRef.current = true;
+      } else if (action === 'potion' && pressed) {
+        potionQueuedRef.current = true;
       }
     },
     []
   );
 
-  // Sync initial body dataset state and unlock BGM on first interaction if autostarted
+  // Sync initial body dataset, touch detection, fullscreen listener, and BGM gesture unlock
   useEffect(() => {
     syncBodyState(phaseRef.current);
+
+    const updateTouch = () => setIsTouchDevice(detectTouchDevice());
+    const onFsChange = () => {
+      const doc = document as Document & { webkitFullscreenElement?: Element | null };
+      setIsFullscreen(Boolean(document.fullscreenElement || doc.webkitFullscreenElement));
+    };
+
     const resumeAudioOnGesture = () => {
       if (phaseRef.current === 'playing') {
         soundEngine.setBgmActive(true);
       }
     };
+
+    window.addEventListener('resize', updateTouch);
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
     window.addEventListener('pointerdown', resumeAudioOnGesture, { once: true });
     window.addEventListener('keydown', resumeAudioOnGesture, { once: true });
     return () => {
       soundEngine.setBgmActive(false);
+      window.removeEventListener('resize', updateTouch);
+      document.removeEventListener('fullscreenchange', onFsChange);
+      document.removeEventListener('webkitfullscreenchange', onFsChange);
       window.removeEventListener('pointerdown', resumeAudioOnGesture);
       window.removeEventListener('keydown', resumeAudioOnGesture);
     };
@@ -294,6 +356,12 @@ export default function App() {
       if (e.code === 'KeyM') {
         e.preventDefault();
         handleToggleMute();
+        return;
+      }
+
+      if (e.code === 'KeyV') {
+        e.preventDefault();
+        handleToggleFullscreen();
         return;
       }
 
@@ -358,7 +426,12 @@ export default function App() {
 
     const clearInputs = () => {
       keysHeldRef.current.clear();
-      touchStateRef.current = { left: false, right: false, jump: false };
+      touchStateRef.current = {
+        left: false,
+        right: false,
+        down: false,
+        jump: false,
+      };
     };
 
     const onVisChange = () => {
@@ -381,6 +454,7 @@ export default function App() {
     handleNextStage,
     handleRestartStage,
     handleStartFromTitle,
+    handleToggleFullscreen,
     handleToggleMute,
     handleTogglePause,
     loadStage,
@@ -432,7 +506,7 @@ export default function App() {
             held.has('Space') ||
             touch.jump,
           jumpJustPressed: jumpQueuedRef.current,
-          down: held.has('KeyS') || held.has('ArrowDown'),
+          down: held.has('KeyS') || held.has('ArrowDown') || touch.down,
           castJustPressed: castQueuedRef.current,
           potionJustPressed: potionQueuedRef.current,
         };
@@ -486,10 +560,9 @@ export default function App() {
         }
 
         // Throttled discrete HUD snapshot sync
-        const boss =
-          world.stage.index === 9
-            ? world.enemies.find((e) => e.type === 'warden' && e.state !== 'ko')
-            : undefined;
+        const boss = world.enemies.find(
+          (e) => e.type === 'warden' && e.state !== 'ko'
+        );
         const sig = `${world.stage.index}|${world.stats.hp}/${world.stats.maxHp}|${world.stats.level}|${world.stats.xp}|${world.stats.gold}|${world.stats.potions}|${world.stats.relics.length}|${Math.floor(world.elapsedSeconds)}|${boss ? boss.hp : -1}|${world.bannerText ?? ''}`;
         if (sig !== lastHudSignature) {
           lastHudSignature = sig;
@@ -540,8 +613,10 @@ export default function App() {
       {phase === 'title' && (
         <TitleOverlay
           highestReachedStage={highestReachedStage}
+          isFullscreen={isFullscreen}
           onStart={handleStartFromTitle}
           onOpenStages={handleOpenStages}
+          onToggleFullscreen={handleToggleFullscreen}
         />
       )}
 
@@ -549,12 +624,16 @@ export default function App() {
         <GameHud
           hud={hud}
           muted={muted}
+          isFullscreen={isFullscreen}
+          isTouchDevice={isTouchDevice}
           onUsePotion={handleUsePotion}
           onToggleMute={handleToggleMute}
+          onToggleFullscreen={handleToggleFullscreen}
           onPause={handleTogglePause}
           onRestart={handleRestartStage}
           onOpenStages={handleOpenStages}
-          onTouchKey={handleTouchKey}
+          onJoystickChange={handleJoystickChange}
+          onTouchAction={handleTouchAction}
         />
       )}
 

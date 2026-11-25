@@ -70,6 +70,10 @@ export interface BiomePalette {
 
 export type EnemyType = 'slime' | 'hopper' | 'wisp' | 'sentinel' | 'warden';
 
+export type BossVariant = 'ash_warden' | 'frost_monarch' | 'brass_titan';
+
+export type BossAttackKind = 'leap_slam' | 'volley' | 'charge';
+
 export interface EnemySpawn {
   id: string;
   type: EnemyType;
@@ -131,6 +135,8 @@ export interface PlayerEntity {
   castCooldown: number;
   walkDistance: number;
   crouching: boolean;
+  lastSafeX: number;
+  lastSafeY: number;
 }
 
 export type EnemyAiState = 'patrol' | 'windup' | 'attack' | 'recover' | 'ko';
@@ -159,6 +165,9 @@ export interface EnemyEntity {
   koTimer: number;
   grounded: boolean;
   phase: number; // used for boss phases or wisp hover
+  bossVariant?: BossVariant;
+  bossName?: string;
+  bossAttack?: BossAttackKind;
 }
 
 export interface MovingPlatformEntity {
